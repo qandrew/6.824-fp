@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"log"
 	"net/rpc"
 	"op"
-	"os"
 )
 
 type OTClient struct {
@@ -14,10 +12,13 @@ type OTClient struct {
 
 func NewOTClient() *OTClient {
 	cl := &OTClient{}
-	cl.rpc_client, err = rpc.Dial("tcp", "localhost:42586")
+	rpc_client, err := rpc.Dial("tcp", "localhost:42586")
+	cl.rpc_client = rpc_client
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	return cl
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
@@ -32,7 +33,7 @@ func (cl *OTClient) Delete(pos int) {
 
 func (cl *OTClient) SendOp(op *op.Op) bool {
 	var reply bool
-	err = rpc_client.Call("Listener.ApplyOp", op, &reply)
+	err := cl.rpc_client.Call("Listener.ApplyOp", op, &reply)
 	if err != nil {
 		log.Fatal(err)
 	}

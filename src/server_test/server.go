@@ -7,12 +7,13 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"op"
 )
 
 type Listener int
 
-func (l *Listener) GetLine(line []byte, ack *bool) error {
-	fmt.Println(string(line))
+func (l *Listener) ApplyOp(op *op.Op, ack *bool) error {
+	fmt.Println(op)
 	return nil
 }
 

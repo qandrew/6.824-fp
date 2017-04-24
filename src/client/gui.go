@@ -280,10 +280,10 @@ mainloop:
 			//case termbox.KeyDelete, termbox.KeyCtrlD:
 			//	edit_box.DeleteRuneForward()
 			case termbox.KeyTab:
-				edit_box.InsertRune('\t', pos)
-				cl.Insert('\t')
+				edit_box.InsertRune('\t')
+				cl.Insert('\t', pos)
 			case termbox.KeySpace:
-				edit_box.InsertRune(' ', pos)
+				edit_box.InsertRune(' ')
 				cl.Insert(' ', pos)
 			//case termbox.KeyCtrlK:
 			//	edit_box.DeleteTheRestOfTheLine()
