@@ -3,21 +3,21 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
-	"sync"
 	"net"
 	"net/rpc"
 	"op"
-	"errors"
+	"sync"
 )
 
 type OTServer struct {
-	mu			sync.Mutex  // Lock to protect shared access to this peer's state
-	logs 		[]op.Op
-	currState	string	//string of the most updated version
-	version		int		//last updated version
-	clients		map[int64]int //*rpc.Client keep track of version num
+	mu        sync.Mutex // Lock to protect shared access to this peer's state
+	logs      []op.Op
+	currState string        //string of the most updated version
+	version   int           //last updated version
+	clients   map[int64]int //*rpc.Client keep track of version num
 }
 
 func (sv *OTServer) Init(clientID int64, resp *bool) error {
@@ -33,26 +33,24 @@ func (sv *OTServer) Init(clientID int64, resp *bool) error {
 func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
 	// operation called by the client
 	// fmt.Println(args)
-	sv.logs = append(sv.logs,*args)
+	sv.logs = append(sv.logs, *args)
 
-
-	fmt.Println("currState", sv.logs)
-
-	err := sv.ApplyTransformation(args,resp) // do the actual OT here
+	err := sv.ApplyTransformation(args, resp) // do the actual OT here
 
 	return err
 }
 
 func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
+	fmt.Println("incoming op ", args)
 	if args.OpType == "ins" {
 		// sv.currState += args.Payload
-		if args.Position == 0{
+		if args.Position == 0 {
 			sv.currState = args.Payload + sv.currState // append at beginning
 		} else {
 			sv.currState = sv.currState[:args.Position] + args.Payload + sv.currState[args.Position:]
 		}
 	} else if args.OpType == "del" {
-		if args.Position == len(sv.currState) && len(sv.currState) != 0{
+		if args.Position == len(sv.currState) && len(sv.currState) != 0 {
 			sv.currState = sv.currState[:args.Position-1]
 		} else {
 			sv.currState = sv.currState[:args.Position-1] + sv.currState[args.Position:]
@@ -60,7 +58,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 	} else {
 		return errors.New("ApplyTransformation: wrong operation input")
 	}
-	fmt.Println("ApplyTransformation: now", sv.currState)
+	//fmt.Println("ApplyTransformation: now", sv.currState)
 
 	return nil
 }
