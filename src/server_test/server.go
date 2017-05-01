@@ -10,15 +10,21 @@ import (
 	"op"
 )
 
-type Listener int
+type OTServer struct {
+	logs 		[]op.Op
+	currState	string	//string of the most updated version
+	version		int		//last updated version
+}
 
-func (l *Listener) ApplyOp(op *op.Op, ack *bool) error {
+func (sv *OTServer) ApplyOp(op *op.Op, ack *bool) error {
+
 	fmt.Println(op)
+	fmt.Println("currState")
 	return nil
 }
 
 func main() {
-	addy, err := net.ResolveTCPAddr("tcp", "0.0.0.0:42586")
+	addy, err := net.ResolveTCPAddr("tcp", "localhost:42586")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,7 +34,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	listener := new(Listener)
-	rpc.Register(listener)
+	sv := new(OTServer)
+
+	rpc.Register(sv)
 	rpc.Accept(inbound)
 }

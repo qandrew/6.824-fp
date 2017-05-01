@@ -33,7 +33,7 @@ func (cl *OTClient) Delete(pos int) {
 
 func (cl *OTClient) SendOp(op *op.Op) bool {
 	var reply bool
-	err := cl.rpc_client.Call("Listener.ApplyOp", op, &reply)
+	err := cl.rpc_client.Call("OTServer.ApplyOp", op, &reply)
 	if err != nil {
 		log.Fatal(err)
 	}
