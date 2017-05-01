@@ -8,6 +8,8 @@ import (
 
 type OTClient struct {
 	rpc_client *rpc.Client
+	version		int 		// most up to date version
+
 }
 
 func NewOTClient() *OTClient {
@@ -22,21 +24,25 @@ func NewOTClient() *OTClient {
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
-	op := op.Op{"ins", pos, 0, string(ch)} // version?
-	cl.SendOp(&op)
+	args := op.Op{"ins", pos, 0, string(ch)} // version?
+	reply := cl.SendOp(&args)
+	cl.version = reply.Version // temporary
 }
 
 func (cl *OTClient) Delete(pos int) {
-	op := op.Op{"del", pos, 0, ""} // version?
-	cl.SendOp(&op)
+	if pos != 0 { // can't delete first 
+		args := op.Op{"del", pos, 0, ""} // version?
+		reply := cl.SendOp(&args)
+		cl.version = reply.Version
+	}
 }
 
-func (cl *OTClient) SendOp(op *op.Op) bool {
-	var reply bool
-	err := cl.rpc_client.Call("OTServer.ApplyOp", op, &reply)
+func (cl *OTClient) SendOp(args *op.Op) op.Op {
+	var reply op.Op
+	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
-	}
+	} 
 	return reply
 }
 

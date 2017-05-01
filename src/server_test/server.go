@@ -5,21 +5,53 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"net"
 	"net/rpc"
 	"op"
+	"errors"
 )
 
 type OTServer struct {
+	mu			sync.Mutex  // Lock to protect shared access to this peer's state
 	logs 		[]op.Op
 	currState	string	//string of the most updated version
 	version		int		//last updated version
+	clients		[]*rpc.Client
 }
 
-func (sv *OTServer) ApplyOp(op *op.Op, ack *bool) error {
+func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
+	// operation called by the client
+	// fmt.Println(args)
+	sv.logs = append(sv.logs,*args)
 
-	fmt.Println(op)
-	fmt.Println("currState")
+
+	fmt.Println("currState", sv.logs)
+
+	err := sv.ApplyTransformation(args,resp) // do the actual OT here
+
+	return err
+}
+
+func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
+	if args.OpType == "ins" {
+		// sv.currState += args.Payload
+		if args.Position == 0{
+			sv.currState = args.Payload + sv.currState // append at beginning
+		} else {
+			sv.currState = sv.currState[:args.Position] + args.Payload + sv.currState[args.Position:]
+		}
+	} else if args.OpType == "del" {
+		if args.Position == len(sv.currState) && len(sv.currState) != 0{
+			sv.currState = sv.currState[:args.Position-1]
+		} else {
+			sv.currState = sv.currState[:args.Position-1] + sv.currState[args.Position:]
+		}
+	} else {
+		return errors.New("ApplyTransformation: wrong operation input")
+	}
+	fmt.Println("ApplyTransformation: now", sv.currState)
+
 	return nil
 }
 
@@ -35,6 +67,7 @@ func main() {
 	}
 
 	sv := new(OTServer)
+	// sv.
 
 	rpc.Register(sv)
 	rpc.Accept(inbound)
