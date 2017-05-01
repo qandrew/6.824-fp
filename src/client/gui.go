@@ -13,6 +13,8 @@ import (
 
 	"github.com/nsf/termbox-go"
 	"gocui"
+
+	"client_common"
 )
 
 func nextView(g *gocui.Gui, v *gocui.View, key interface{}) error {
@@ -187,7 +189,7 @@ func layout(g *gocui.Gui) error {
 	return nil
 }
 
-func start_ui(cl *OTClient) {
+func start_ui(cl *client_common.OTClient) {
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
 		log.Panicln(err)

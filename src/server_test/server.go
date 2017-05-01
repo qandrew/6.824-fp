@@ -17,7 +17,17 @@ type OTServer struct {
 	logs 		[]op.Op
 	currState	string	//string of the most updated version
 	version		int		//last updated version
-	clients		[]*rpc.Client
+	clients		map[int64]int //*rpc.Client keep track of version num
+}
+
+func (sv *OTServer) Init(clientID int64, resp *bool) error {
+	if sv.clients[clientID] != 0 {
+		sv.clients[clientID] = 0
+		fmt.Println("registered client", clientID)
+		*resp = true
+	}
+	*resp = false
+	return nil
 }
 
 func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
@@ -67,7 +77,7 @@ func main() {
 	}
 
 	sv := new(OTServer)
-	// sv.
+	sv.clients = make(map[int64]int) //*rpc.Client)
 
 	rpc.Register(sv)
 	rpc.Accept(inbound)
