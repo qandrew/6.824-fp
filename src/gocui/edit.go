@@ -230,6 +230,9 @@ func (v *View) MoveCursor(dx, dy int, writeMode bool) {
 		}
 	} else {
 		v.cy = cy
+		if len(v.lines[cy]) < v.cx {
+			v.cx = len(v.lines[cy])
+		}
 	}
 }
 

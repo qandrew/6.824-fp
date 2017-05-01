@@ -1,17 +1,18 @@
 package client_common
 
 import (
+	"crypto/rand"
 	"log"
+	"math/big"
 	"net/rpc"
 	"op"
-	"crypto/rand"
-	"math/big"
 )
+
 type OTClient struct {
 	rpc_client *rpc.Client
-	uid			int64
-	version		int 		// client side sent
-	versionS	int 		// client side received
+	uid        int64
+	version    int // client side sent
+	versionS   int // client side received
 }
 
 func NewOTClient() *OTClient {
@@ -25,20 +26,27 @@ func NewOTClient() *OTClient {
 	cl.uid = nrand()
 	// cl.
 	var ack bool
-	cl.rpc_client.Call("OTServer.Init",cl.uid,&ack)
+	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
 	return cl
 }
 
+func (cl *OTClient) GetSnapshot() string {
+	snap := op.Snapshot{}
+	snapIn := op.Snapshot{}
+	cl.rpc_client.Call("OTServer.GetSnapshot", &snapIn, &snap)
+	return snap.Value
+}
+
 func (cl *OTClient) Insert(ch rune, pos int) {
-	args := op.Op{"ins", pos, 0,0, string(ch)} // version?
+	args := op.Op{"ins", pos, 0, 0, string(ch)} // version?
 	reply := cl.SendOp(&args)
 	cl.version = reply.Version // temporary
 }
 
 func (cl *OTClient) Delete(pos int) {
-	if pos != 0 { // can't delete first 
-		args := op.Op{"del", pos, 0,0, ""} // version?
+	if pos != 0 { // can't delete first
+		args := op.Op{"del", pos, 0, 0, ""} // version?
 		reply := cl.SendOp(&args)
 		cl.version = reply.Version
 	}
@@ -49,7 +57,7 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
-	} 
+	}
 	return reply
 }
 

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/rpc"
 	"op"
+	"strings"
 	"sync"
 )
 
@@ -40,6 +41,11 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
 	return err
 }
 
+func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
+	resp.Value = sv.currState
+	return nil
+}
+
 func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 	fmt.Println("incoming op ", args)
 	if args.OpType == "ins" {
@@ -58,7 +64,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 	} else {
 		return errors.New("ApplyTransformation: wrong operation input")
 	}
-	//fmt.Println("ApplyTransformation: now", sv.currState)
+	fmt.Println("ApplyTransformation: now", strings.Replace(sv.currState, "\n", "\\n", -1))
 
 	return nil
 }
