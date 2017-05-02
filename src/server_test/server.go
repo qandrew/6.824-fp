@@ -25,9 +25,12 @@ type OTServer struct {
 }
 
 func (sv *OTServer) Init(clientID int64, resp *bool) error {
-	if sv.clients[clientID] == 0 {
+
+	if _, ok := sv.clients[clientID]; !ok { // check if key exists
+		// sv.mu.Lock()
 		sv.clients[clientID] = 1
-		fmt.Println("registered client", clientID)
+		// sv.mu.Unlock()
+		fmt.Println("registered", sv.clients)
 		*resp = true
 	}
 	*resp = false
@@ -40,8 +43,28 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
 	sv.logs = append(sv.logs, *args)
 
 	err := sv.ApplyTransformation(args, resp) // do the actual OT here
+	sv.Broadcast(args) // send to other clients
 
 	return err
+}
+
+func (sv *OTServer) Broadcast(args *op.Op) error {
+	// this function broadcasts the OT to the other clients
+
+	if len(sv.clients) > 1{
+		// for k,v := range sv.clients {
+			// go func(k int64){
+				// var toSend op.Op
+				// var ack bool
+				// toSend.Uid = 
+				fmt.Println("attempt to send to")
+				// sv.Rpc_client.Call("ReceiveOp", 3, &ack)
+			// }(k)
+		// }
+	} else {
+		fmt.Println("broadcast too short")
+	}
+	return nil
 }
 
 func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
@@ -95,23 +118,16 @@ func main() {
 
 	srv := rpc2.NewServer()
 	srv.Handle("Init", func(client *rpc2.Client, clientID int64, resp *bool) error{
-
-	  // Reversed call (server to client)
-	  // var rep Reply
-	  // client.Call("mult", Args{2, 3}, &rep)
-	  fmt.Println("server received:", clientID)
-
-	  *resp = true
-	  return nil
+	  return sv.Init(clientID, resp)
 	})
 
 	srv.Handle("ApplyOp", func(client *rpc2.Client, args *op.Op, resp *op.Op) error{
-		fmt.Println("operation received", args)
+		// fmt.Println("operation received", args)
 		return sv.ApplyOp(args,resp)
 	})
 
 	srv.Handle("GetSnapshot",func(client *rpc2.Client, req *op.Snapshot, resp *op.Snapshot) error{
-		fmt.Println("snapshot received", req)
+		// fmt.Println("snapshot received", req)
 		return sv.GetSnapshot(req,resp)
 	})
 

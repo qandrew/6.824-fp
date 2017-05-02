@@ -43,6 +43,9 @@ func main(){
  //   	go clt.Run()
 	cl := client_common.NewOTClient()
 	cl.Version = 1
+	for {
+		
+	}
 
     // var rep bool
     // cl.Rpc_client.Call("Init", 
