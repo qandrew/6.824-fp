@@ -1,7 +1,8 @@
 package client_common
 
 import (
-	"crypto/rand"
+	randC "crypto/rand"
+	r "math/rand"
 	"log"
 	"math/big"
 	"net/rpc"
@@ -9,7 +10,7 @@ import (
 	"time"
 	"fmt"
 	"errors"
-	// "strconv"
+	"strconv"
 )
 
 const SLEEP = 1000
@@ -42,31 +43,26 @@ func NewOTClient() *OTClient {
 
 	go func(){
 		var empty op.Op
-		// sleep := 1000
+		sleep := 1000
 		empty.Uid = cl.uid
 		empty.OpType = "empty"
 		for {
-			time.Sleep(SLEEP*time.Millisecond)
-			// time.Sleep(sleep*time.Millisecond) // some time/duration bug
+			time.Sleep(time.Duration(sleep)*time.Millisecond) // some time/duration bug
 			empty.Version = cl.version // update version
 			empty.VersionS = cl.versionS // update version
-			// fmt.Println("sending", empty)
 			var reply op.Op
 			err := cl.rpc_client.Call("OTServer.ApplyOp", empty, &reply)
 			if err != nil {
 				log.Fatal(err)
 			} 
 			if reply.OpType != "empty" {
+				sleep = 10 // instantly request more 
 				if cl.Debug{
 					fmt.Println("client behind; received", reply)
 				}
 				cl.xform(reply) // do some OT
-				// sleep = 0 // instantly request more 
-				// but for now
-				// cl.version = reply.Version
-				// cl.versionS = reply.VersionS
 			} else {
-				// sleep = 1000 // go back to periodical
+				sleep = 1000 // go back to periodical
 			}
 		}
 	}()
@@ -74,11 +70,50 @@ func NewOTClient() *OTClient {
 	return cl
 }
 
-func (cl *OTClient) xform(args op.Op) {
-	if args.OpType == "ins" || args.OpType == "del" {
-		// cl.version = args.Version // CHANGE THIS LATER
-		// cl.logs = append(cl.logs, *args) // CHANGE THIS LATER
+func (cl *OTClient) getLogVersion (i int) op.Op{
+	// return the log with version index i
+	// in case we condense log in future
+	if cl.logs[i-1].Version == i{
+		return cl.logs[i-1]
+	} 
+	fmt.Println("fuck")
+	return cl.logs[i-1]
+}
 
+func (cl *OTClient) addCurrState(args op.Op) {
+	// no OT needed
+	if args.OpType == "ins" {
+		// cl.currState += args.Payload
+		if args.Position == 0 {
+			cl.currState = args.Payload + cl.currState // append at beginning
+		} else {
+			cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
+		}
+	} else {
+		if args.Position == len(cl.currState) && len(cl.currState) != 0 {
+			cl.currState = cl.currState[:args.Position-1]
+		} else {
+			cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
+		}
+	}
+	if cl.Debug{
+		fmt.Println("addCurrState: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
+	}
+}
+
+func (cl *OTClient) xform(args op.Op) {
+	// args is an entry from log
+	// we can assume that args.VersionS contains the server version
+	// client is at version cl.version
+	// we want it such that given client logs, ending at cl.version, and args, ending at server versionS
+	// append args' st we get closer to merging
+
+	if args.OpType != "ins" && args.OpType != "del" {
+		log.Fatal(errors.New("xform: wrong operation input"))
+	}
+
+	if args.VersionS == cl.versionS && args.Version == cl.version {
+		// in this case, we don't need to do any transforms
 		if args.OpType == "ins" {
 			// cl.currState += args.Payload
 			if args.Position == 0 {
@@ -95,17 +130,50 @@ func (cl *OTClient) xform(args op.Op) {
 		}
 		cl.version =  args.VersionS + 1
 		cl.versionS = args.VersionS + 1 // SINCE WE APPLIED FUNCTION, we can update server version
-	} else {
-		log.Fatal(errors.New("xform: wrong operation input"))
-	}
+		cl.logs = append(cl.logs, args) 
+		if cl.Debug{
+			fmt.Println("xform normal: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
+		}
+	} else if cl.version > args.Version && cl.versionS < args.VersionS {
+		// diverging situation
+		// ex if cl at (1,0) and args at (0,1)
+		// we want to apply args' such that cl will end up at (1,1)
+		logTemp := cl.getLogVersion(args.Version)
+		if logTemp.Position < args.Position{
+			// modify where we actually want to insert
+			// since a previous insert will mess up position
+			if logTemp.OpType == "ins" { args.Position += 1
+			} else if logTemp.OpType == "del" {args.Position -= 1}
+		}
+		if args.OpType == "ins" {
+			// cl.currState += args.Payload
+			if args.Position == 0 {
+				cl.currState = args.Payload + cl.currState // append at beginning
+			} else {
+				cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
+			}
+		} else {
+			if args.Position == len(cl.currState) && len(cl.currState) != 0 {
+				cl.currState = cl.currState[:args.Position-1]
+			} else {
+				cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
+			}
+		}
+		cl.versionS = args.VersionS // update server version kept on args
+		cl.logs = append(cl.logs, args) // append the modified logs
+		if cl.Debug{
+			fmt.Println("xform diverge: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
+		}
+	} 
 	if cl.Debug{
-		fmt.Println("xform: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
+		fmt.Println("xform: now", cl.currState, "ver", cl.version, "serv", cl.versionS, "logs", cl.logs)
 	}
 }
 
 func (cl *OTClient) GetSnapshot() string {
-	snap := op.Snapshot{}
 	snapIn := op.Snapshot{}
+	snapIn.Uid = cl.uid
+	snap := op.Snapshot{}
 	cl.rpc_client.Call("OTServer.GetSnapshot", &snapIn, &snap)
 	if cl.version < snap.VersionS { 
 		// update client's version of itself and client's server version record
@@ -137,16 +205,20 @@ func (cl *OTClient) Delete(pos int) {
 
 func (cl *OTClient) RandOp() {
 	// let the client do a random operation
-	// pos := rand.Int(rand.Reader,len(currState))
-	// val := strconv.Itoa(rand.Int(rand.Reader,9))
-	// args := op.Op{"ins", pos, cl.addVersion(),cl.versionS,cl.uid, val} 
-	// cl.SendOp(&args)
+	var pos int
+	if len(cl.currState) == 0{ pos = 0
+	} else { pos = r.Intn(len(cl.currState))}
+	val := strconv.Itoa(r.Intn(9))
+	args := op.Op{"ins", pos, cl.addVersion(),cl.versionS,cl.uid, val} 
+	fmt.Println("calling", args)
+	cl.SendOp(&args)
 
 }
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	var reply op.Op
 	cl.logs = append(cl.logs, *args) // add to logs
+	cl.addCurrState(*args) // do some OT
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
@@ -163,7 +235,7 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 
 func nrand() int64 {
 	max := big.NewInt(int64(1) << 40) // was 62
-	bigx, _ := rand.Int(rand.Reader, max)
+	bigx, _ := randC.Int(randC.Reader, max)
 	x := bigx.Int64()
 	return x
 }

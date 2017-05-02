@@ -11,7 +11,7 @@ type Op struct {
 
 type Snapshot struct {
 	Value 	string
-	// Uid 	int64	//
+	Uid 	int64	//
 	Version int  	// version of client
 	VersionS int 	// version of server
 }
