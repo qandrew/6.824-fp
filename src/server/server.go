@@ -1,13 +1,30 @@
-package server
+// server.go
+package main
 
-import "fmt"
+import (
+ "net"
+ "github.com/cenkalti/rpc2"
+ // "fmt"
+ // "client_common"
+)
+
+type Args struct{ A, B int }
+type Reply int
 
 
-// this file contains our server 
-// the server contains the master copy of the collaborative editor
-// it receives operations from clients
-// and returns operations to clients
 
-func main() {
-	fmt.Printf("Hello, world.\n")
+func main(){
+ srv := rpc2.NewServer()
+ srv.Handle("add", func(client *rpc2.Client, args *Args, reply *Reply) error{
+    // Reversed call (server to client)
+    // var rep Reply
+    // client.Call("mult", Args{2, 3}, &rep)
+    // fmt.Println("mult result:", rep)
+
+    *reply = Reply(args.A + args.B)
+    return nil
+ })
+
+ lis, _ := net.Listen("tcp", "127.0.0.1:5000")
+ srv.Accept(lis)
 }

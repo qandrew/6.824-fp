@@ -5,16 +5,19 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
+	// "log"
 	"net"
-	"net/rpc"
+	// "net/rpc"
 	"op"
 	"strings"
 	"sync"
+
+ 	"github.com/cenkalti/rpc2"
 )
 
 type OTServer struct {
 	mu        sync.Mutex // Lock to protect shared access to this peer's state
+	Rpc_client *rpc2.Client
 	logs      []op.Op
 	currState string        //string of the most updated version
 	version   int           //last updated version
@@ -22,8 +25,8 @@ type OTServer struct {
 }
 
 func (sv *OTServer) Init(clientID int64, resp *bool) error {
-	if sv.clients[clientID] != 0 {
-		sv.clients[clientID] = 0
+	if sv.clients[clientID] == 0 {
+		sv.clients[clientID] = 1
 		fmt.Println("registered client", clientID)
 		*resp = true
 	}
@@ -43,6 +46,7 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
 
 func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
 	resp.Value = sv.currState
+	fmt.Println("snapshot returned to")
 	return nil
 }
 
@@ -70,19 +74,47 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 }
 
 func main() {
-	addy, err := net.ResolveTCPAddr("tcp", "localhost:42586")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// addy, err := net.ResolveTCPAddr("tcp", "localhost:42586")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	inbound, err := net.ListenTCP("tcp", addy)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// inbound, err := net.ListenTCP("tcp", addy)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// sv := new(OTServer)
+	// sv.clients = make(map[int64]int) //*rpc.Client)
+
+	// rpc.Register(sv)
+	// rpc.Accept(inbound)
 
 	sv := new(OTServer)
 	sv.clients = make(map[int64]int) //*rpc.Client)
 
-	rpc.Register(sv)
-	rpc.Accept(inbound)
+	srv := rpc2.NewServer()
+	srv.Handle("Init", func(client *rpc2.Client, clientID int64, resp *bool) error{
+
+	  // Reversed call (server to client)
+	  // var rep Reply
+	  // client.Call("mult", Args{2, 3}, &rep)
+	  fmt.Println("server received:", clientID)
+
+	  *resp = true
+	  return nil
+	})
+
+	srv.Handle("ApplyOp", func(client *rpc2.Client, args *op.Op, resp *op.Op) error{
+		fmt.Println("operation received", args)
+		return sv.ApplyOp(args,resp)
+	})
+
+	srv.Handle("GetSnapshot",func(client *rpc2.Client, req *op.Snapshot, resp *op.Snapshot) error{
+		fmt.Println("snapshot received", req)
+		return sv.GetSnapshot(req,resp)
+	})
+
+	lis, _ := net.Listen("tcp", "127.0.0.1:5000")
+	srv.Accept(lis)
 }

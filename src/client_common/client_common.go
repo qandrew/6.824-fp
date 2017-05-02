@@ -4,57 +4,93 @@ import (
 	"crypto/rand"
 	"log"
 	"math/big"
-	"net/rpc"
+	// "net/rpc"
+	"net"
+	"github.com/cenkalti/rpc2"
 	"op"
+	"fmt"
 )
 
 type OTClient struct {
-	rpc_client *rpc.Client
+	Rpc_client *rpc2.Client
 	uid        int64
-	version    int // client side sent
+	Version    int // client side sent
 	versionS   int // client side received
 }
+type Args struct{ A, B int }
+type Reply int
 
 func NewOTClient() *OTClient {
 	cl := &OTClient{}
-	rpc_client, err := rpc.Dial("tcp", "localhost:42586")
-	cl.rpc_client = rpc_client
-	if err != nil {
-		log.Fatal(err)
-	}
+	conn, _ := net.Dial("tcp", "127.0.0.1:5000")
 
+	cl.Rpc_client = rpc2.NewClient(conn)
 	cl.uid = nrand()
-	// cl.
-	var ack bool
-	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
+	cl.Version = 1
 
+	cl.Rpc_client.Handle("ReceiveOp", func(client *rpc2.Client, args *op.Op, resp *op.Op) error {
+		fmt.Println("client processed")	
+		return nil
+   	})
+   	go cl.Rpc_client.Run() // runs the client
+
+   	var rep bool
+   	cl.Rpc_client.Call("Init", cl.uid, &rep)
+   	fmt.Println("init received:", rep)
 	return cl
 }
+
+// to be deprecated
+
+// type OTClient struct {
+// 	rpc_client *rpc.Client
+// 	uid        int64
+// 	version    int // client side sent
+// 	versionS   int // client side received
+// }
+
+// func NewOTClient() *OTClient {
+// 	cl := &OTClient{}
+// 	rpc_client, err := rpc.Dial("tcp", "localhost:42586")
+// 	cl.rpc_client = rpc_client
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	cl.uid = nrand()
+// 	cl.version = 1
+// 	var ack bool
+// 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
+
+// 	return cl
+// }
 
 func (cl *OTClient) GetSnapshot() string {
 	snap := op.Snapshot{}
 	snapIn := op.Snapshot{}
-	cl.rpc_client.Call("OTServer.GetSnapshot", &snapIn, &snap)
+	// cl.Rpc_client.Call("OTServer.GetSnapshot", &snapIn, &snap)
+	cl.Rpc_client.Call("GetSnapshot", &snapIn, &snap)
 	return snap.Value
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
 	args := op.Op{"ins", pos, 0, 0, string(ch)} // version?
 	reply := cl.SendOp(&args)
-	cl.version = reply.Version // temporary
+	cl.Version = reply.Version // temporary
 }
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
 		args := op.Op{"del", pos, 0, 0, ""} // version?
 		reply := cl.SendOp(&args)
-		cl.version = reply.Version
+		cl.Version = reply.Version
 	}
 }
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	var reply op.Op
-	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
+	// err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
+	err := cl.Rpc_client.Call("ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
 	}
