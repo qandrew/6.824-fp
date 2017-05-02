@@ -18,6 +18,7 @@ type OTServer struct {
 	logs      []op.Op
 	currState string        //string of the most updated version
 	version   int           //last updated version
+
 	clients   map[int64]int //*rpc.Client keep track of version num
 }
 
@@ -55,10 +56,11 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.Op) error {
 	// 	return errors.New("Broadcast: client missing operation, out of order")
 	// } 
 	if sv.version > args.Version { // server ahead of client
-		*resp = sv.logs[args.Version] // return the next log
+		// args.Version guaranteed to be >= 1
+		*resp = sv.logs[args.Version-1] // return the next log
 		fmt.Println("broadcast to", args.Uid, resp)
 	} else {
-		fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
+		// fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
 		resp.OpType = "empty" // client is at same state as server
 	}
 
@@ -72,7 +74,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 		// 	return errors.New("ApplyTransformation: client operation out of order")
 		// } 
 		sv.clients[args.Uid] = args.Version // update client version
-		sv.version = args.Version // CHANGE THIS LATER
+		sv.version = args.Version+1 // CHANGE THIS LATER
 		sv.logs = append(sv.logs, *args) // CHANGE THIS LATER
 
 		if args.OpType == "ins" {
@@ -88,6 +90,10 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 			} else {
 				sv.currState = sv.currState[:args.Position-1] + sv.currState[args.Position:]
 			}
+		}
+		if sv.version == args.Version+1{
+			resp.OpType = "good" // client is up to date from server, won't need to apply OT on client side
+			resp.VersionS = sv.version
 		}
 	} else {
 		return errors.New("ApplyTransformation: wrong operation input")

@@ -1,7 +1,7 @@
 package op
 
 type Op struct {
-	OpType   string // del, ins, empty, good
+	OpType   string // del, ins, empty (broadcast), good (just for updating versions)
 	Position int    // location of where we are operationg
 	Version  int    // version of the text that we are operating on
 	VersionS int    // version of server
