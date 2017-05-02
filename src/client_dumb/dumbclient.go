@@ -7,4 +7,7 @@ import (
 func main() {
 	// client := client_common.NewOTClient()
 	client_common.NewOTClient()
+	for {
+		
+	}
 }
