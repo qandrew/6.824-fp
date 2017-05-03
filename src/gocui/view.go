@@ -195,6 +195,22 @@ func (v *View) Origin() (x, y int) {
 	return v.ox, v.oy
 }
 
+func (v *View) AbsPosition() int {
+	ox, oy := v.Origin()
+	cx, cy := v.Cursor()
+	x := ox + cx
+	y := oy + cy
+
+	pos := 0
+	for i, line := range v.lines {
+		if i >= y {
+			break
+		}
+		pos = pos + len(line) + 1
+	}
+	return pos + x
+}
+
 // Write appends a byte slice into the view's internal buffer. Because
 // View implements the io.Writer interface, it can be passed as parameter
 // of functions like fmt.Fprintf, fmt.Fprintln, io.Copy, etc. Clear must

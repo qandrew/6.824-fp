@@ -160,6 +160,8 @@ func saveVisualMain(g *gocui.Gui, v *gocui.View, key interface{}) error {
 	return nil
 }
 
+var initText = "some initial text"
+
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("side", -1, -1, 30, maxY); err != nil {
@@ -179,7 +181,7 @@ func layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		fmt.Fprintf(v, "Hello, this is the initial text\nenjoy!\n")
+		fmt.Fprintf(v, initText)
 		v.Editable = true
 		v.Wrap = true
 		if _, err := g.SetCurrentView("main"); err != nil {
@@ -196,8 +198,9 @@ func start_ui(cl *client_common.OTClient) {
 	}
 	defer g.Close()
 
-	g.Cursor = true
+	initText = cl.GetSnapshot()
 
+	g.Cursor = true
 	g.SetManagerFunc(layout)
 
 	if err := keybindings(g); err != nil {
@@ -206,20 +209,21 @@ func start_ui(cl *client_common.OTClient) {
 
 	if err := g.SetEventHandler("main", func(g *gocui.Gui, v *gocui.View, e interface{}) error {
 		ev := e.(*termbox.Event)
-		cl.Insert('a', 0)
 		switch ev.Key {
 		case termbox.KeyEsc:
 		case termbox.KeyArrowLeft, termbox.KeyCtrlB:
 		case termbox.KeyArrowRight, termbox.KeyCtrlF:
 		case termbox.KeyBackspace, termbox.KeyBackspace2:
-			cl.Delete(0)
+			cl.Delete(v.AbsPosition())
 		case termbox.KeyTab:
-			cl.Insert('\t', 0)
+			cl.Insert('\t', v.AbsPosition())
 		case termbox.KeySpace:
-			cl.Insert(' ', 0)
+			cl.Insert(' ', v.AbsPosition())
+		case termbox.KeyEnter:
+			cl.Insert('\n', v.AbsPosition())
 		default:
 			if ev.Ch != 0 {
-				cl.Insert(ev.Ch, 0)
+				cl.Insert(ev.Ch, v.AbsPosition())
 			}
 		}
 		return nil

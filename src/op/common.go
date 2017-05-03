@@ -6,6 +6,14 @@ type Op struct {
   Version  int    // version of the text that we are operating on
   VersionS int    // version of server
   Payload  string // in case it is an insert
+  Uid      int64  // uid of server
+}
+
+type Snapshot struct {
+  Value 	string
+  Uid 	int64	//
+  Version int  	// version of client
+  VersionS int 	// version of server
 }
 
 // type Logs struct {

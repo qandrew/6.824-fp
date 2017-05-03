@@ -153,7 +153,7 @@ func (v *View) MoveCursor(dx, dy int, writeMode bool) {
 	}
 
 	// adjust cursor's x position and view's x origin
-	if x > curLineWidth { // move to next line
+	if x >= curLineWidth && curLineWidth > 0 { // move to next line
 		if dx > 0 { // horizontal movement
 			if !v.Wrap {
 				v.ox = 0
@@ -217,6 +217,10 @@ func (v *View) MoveCursor(dx, dy int, writeMode bool) {
 		}
 	}
 
+	// do not allow inserting new lines by just moving down
+	if y >= len(v.lines) {
+		return
+	}
 	// adjust cursor's y position and view's y origin
 	if cy >= maxY {
 		v.oy++
@@ -226,6 +230,9 @@ func (v *View) MoveCursor(dx, dy int, writeMode bool) {
 		}
 	} else {
 		v.cy = cy
+		if len(v.lines[cy]) < v.cx {
+			v.cx = len(v.lines[cy])
+		}
 	}
 }
 
