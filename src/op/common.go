@@ -22,6 +22,7 @@ type Snapshot struct {
 // }
 
 // Applies an operation to a string. Returns an error if the operation is not possible w/ the string
+/*
 func applyOp(op Op, text string) string {
   newText := text
   if op.OpType == "ins" {
@@ -35,67 +36,71 @@ func applyOp(op Op, text string) string {
   }
 
 }
+*/
 
-// Takes two Ops op1 and op2 and transforms them to op1' and op2'. They
-// Must follow the property that performing op1 followed by op2' results
-// in the same state as op2 followed by op1'
-func xform(op1 Op, op2 Op) (Op, Op) {
-  opType1 := op1.OpType
-  opType2 := op2.OpType
+// Takes two Ops opC and opS and transforms them to opC' and opS'. They
+// Must follow the property that performing opC followed by opS' results
+// in the same state as opS followed by opC'. We use the convention that
+// the first operation is client side and the second one is server side.
+func xform(opC Op, opS Op) (Op, Op) {
+  opTypeC := opC.OpType
+  opTypeS := opS.OpType
 
-  newOp1 := op1
-  newOp2 := op2
+  newOpC := opC
+  newOpS := opS
 
   // If there's a lot of different types of operations, we probably
   // Need a matrix, but if it's just insert/delete1 this works for now.
 
-  if opType1 == "ins" && opType2 == "ins" {
-    pos1 := newOp1.Position
-    pos2 := newOp2.Position
-    if pos1 > pos2 {
-      newOp1.Position += len(op2.Payload)
-    } else if pos2 > pos1 {
-      newOp2.Position += len(op1.Payload)
+  if opTypeC == "ins" && opTypeS == "ins" {
+    posC := newOpC.Position
+    posS := newOpS.Position
+    if posC > posS {
+      newOpC.Position += len(opS.Payload)
+    } else if posS > posC {
+      newOpS.Position += len(opC.Payload)
     } else { // They are equal, tiebreak with server comes first or something
 	     // We may need an additional flag in the Op struct that's something
 	     // like isFromServer
-      // :thinking:
+	     // :thinking:
     }
   }
 
-  if opType1 == "del" && opType2 == "del" {
-    pos1 := newOp1.Position
-    pos2 := newOp2.Position
-    if pos1 > pos2 {
-      newOp1.Position--
-    } else if pos2 > pos1 {
-      newOp2.Position--
+  if opTypeC == "del" && opTypeS == "del" {
+    posC := newOpC.Position
+    posS := newOpS.Position
+    if posC > posS {
+      newOpC.Position--
+    } else if posS > posC {
+      newOpS.Position--
     } else {
       // In this case both the server and the client are trying to delete
       // the same thing. So in this case we have double no op.
-      newOp1.OpType = "noOp"
-      newOp2.OpType = "noOp"
+      newOpC.OpType = "noOp"
+      newOpS.OpType = "noOp"
     }
   }
 
   // One insert, one delete. Maybe some kind of matrix is more elegant.
-  if (opType1 == "del" && opType2 == "ins") {
-    pos1 := newOp1.Position
-    pos2 := newOp2.Position
-    if pos1 > pos2 {
-      newOp1.Position += len(op2.Payload)
+  if (opTypeC == "del" && opTypeS == "ins") {
+    posC := newOpC.Position
+    posS := newOpS.Position
+    if posC > posS {
+      newOpC.Position += len(opS.Payload)
     } else {
-      newOp2.Position--
+      newOpS.Position--
+    }
   }
 
-  if (opType1 == "ins" && opType2 == "del") {
-    pos1 := newOp1.Position
-    pos2 := newOp2.Position
-    if pos1 < pos2 {
-      newOp2.Position += len(op1.Payload)
+  if (opTypeC == "ins" && opTypeS == "del") {
+    posC := newOpC.Position
+    posS := newOpS.Position
+    if posC < posS {
+      newOpS.Position += len(opC.Payload)
     } else {
-      newOp1.Position--
+      newOpC.Position--
+    }
   }
 
-  return newOp1, newOp2
+  return newOpC, newOpS
 }
