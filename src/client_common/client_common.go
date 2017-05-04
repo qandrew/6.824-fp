@@ -24,6 +24,8 @@ type OTClient struct {
 
 	versionS   int // client side received
 	Debug 	   bool
+
+	outgoing   chan op.Op
 }
 
 func NewOTClient() *OTClient {
@@ -38,6 +40,7 @@ func NewOTClient() *OTClient {
 	cl.versionS = 1 // let the starting state be (1,1)
 	cl.version = 1 // let the starting state be (1,1)
 	cl.Debug = false
+	cl.outgoing = make(chan op.Op, 100)
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
@@ -158,33 +161,20 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	return reply
 }
 
-func (cl *OTClient) receive(op.Op) {
-	if reply.OpType == "empty"{
+func (cl *OTClient) receive(args op.Op) {
+	if args.OpType == "empty"{
 		// don't do anything
-	} else if reply.OpType == "good" {
+/*	} else if reply.OpType == "good" {
 		cl.versionS = reply.VersionS // update server version
-	} else if reply.OpType == "ins" || reply.OpType == "del"{
-		if args.OpType != "ins" && args.OpType != "del" {
+*/
+	} else if args.OpType == "ins" || args.OpType == "del"{
+/*		if args.OpType != "ins" && args.OpType != "del" {
 			log.Fatal(errors.New("xform: wrong operation input"))
 		}
-
+*/
 		if args.VersionS == cl.versionS && args.Version == cl.version {
 			// in this case, we don't need to do any transforms
-			if args.OpType == "ins" {
-				// cl.currState += args.Payload
-				if args.Position == 0 {
-					cl.currState = args.Payload + cl.currState // append at beginning
-				} else {
-					cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
-				}
-			} else {
-				if args.Position == len(cl.currState) && len(cl.currState) != 0 {
-					cl.currState = cl.currState[:args.Position-1]
-				} else {
-					cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
-				}
-			}
-			cl.version =  args.VersionS + 1
+			cl.addCurrState(args)
 			cl.versionS = args.VersionS + 1 // SINCE WE APPLIED FUNCTION, we can update server version
 			cl.logs = append(cl.logs, args)
 			if cl.Debug{
