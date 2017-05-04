@@ -5,8 +5,8 @@ type Op struct {
   Position int    // location of where we are operationg
   Version  int    // version of the text that we are operating on
   VersionS int    // version of server
-  Payload  string // in case it is an insert
   Uid      int64  // uid of server
+  Payload  string // in case it is an insert
 }
 
 type Snapshot struct {
