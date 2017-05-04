@@ -1,5 +1,9 @@
 package op
 
+import (
+	// "fmt"
+)
+
 type Op struct {
   OpType   string // delete, insert, ??
   Position int    // location of where we are operationg
@@ -22,28 +26,34 @@ type OpReply struct {
   Num		int // idk debug purpose?
 }
 
-// Applies an operation to a string. Returns an error if the operation is not possible w/ the string
-/*
-func applyOp(op Op, text string) string {
-  newText := text
-  if op.OpType == "ins" {
-    if op.Position <= len(string) {
-      
-    } else {
-      fmt.PrintLn("Trying to insert after the end of string")
-    }
-  } else if op.OpType == "del" {
 
-  }
+func ApplyOperation(args Op, currState string) string {
+	// no OT needed, simply insert/delete args onto the currstate string
+	if args.OpType == "ins" {
+		// currState += args.Payload
+		if args.Position == 0 {
+			currState = args.Payload + currState // append at beginning
+		} else {
+			currState = currState[:args.Position] + args.Payload + currState[args.Position:]
+		}
+	} else {
+		if args.Position == len(currState) && len(currState) != 0 {
+			currState = currState[:args.Position-1]
+		} else {
+			currState = currState[:args.Position-1] + currState[args.Position:]
+		}
+	}
+	// fmt.Println("applied", args, "now", currState)
 
+	return currState
 }
-*/
+
 
 // Takes two Ops opC and opS and transforms them to opC' and opS'. They
 // Must follow the property that performing opC followed by opS' results
 // in the same state as opS followed by opC'. We use the convention that
 // the first operation is client side and the second one is server side.
-func xform(opC Op, opS Op) (Op, Op) {
+func Xform(opC Op, opS Op) (Op, Op) {
   opTypeC := opC.OpType
   opTypeS := opS.OpType
 

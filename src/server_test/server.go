@@ -67,7 +67,7 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 	// 	return errors.New("Broadcast: client missing operation, out of order")
 	// }
 	resp.Logs = make([]op.Op,1)
-	fmt.Println("received", args, sv.version, len(resp.Logs), resp)
+	// fmt.Println("received", args, sv.version, len(resp.Logs), resp)
 	if sv.version > args.Version { // server ahead of client
 		fmt.Println("broadcast to", args.Uid, resp)
 		// args.Version guaranteed to be >= 1
@@ -76,12 +76,20 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 		sv.clients[args.Uid] += 1 // assume that client will be able to resolve
 		// tho technically we might need an ack from client
 	} else {
-		fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
+		// fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
 		resp.Logs[0].OpType = "empty" // client is at same state as server
 	}
-	fmt.Println("processed", resp)
+	// fmt.Println("processed", resp)
 
 	return nil
+}
+
+func (sv *OTServer) useOperationAndUpdate(args op.Op){
+	// apply to curr state, increment version, and append to log
+	sv.currState = op.ApplyOperation(args,sv.currState)
+	args.VersionS = sv.version // safety check
+	sv.version++ // SINCE WE APPLIED FUNCTION, we can update server version
+	sv.logs = append(sv.logs, args)
 }
 
 func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
@@ -89,65 +97,35 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 	if args.OpType != "ins" && args.OpType != "del" {
 		log.Fatal(errors.New("xform: wrong operation input"))
 	}
-
 	resp.Logs = make([]op.Op,1) // make a new entry in resp logs
-
 	if args.VersionS == sv.version && args.Version == sv.clients[args.Uid] {
 		// in this case, we don't need to do any transforms
-		if args.OpType == "ins" {
-			// sv.currState += args.Payload
-			if args.Position == 0 {
-				sv.currState = args.Payload + sv.currState // append at beginning
-			} else {
-				sv.currState = sv.currState[:args.Position] + args.Payload + sv.currState[args.Position:]
-			}
-		} else {
-			if args.Position == len(sv.currState) && len(sv.currState) != 0 {
-				sv.currState = sv.currState[:args.Position-1]
-			} else {
-				sv.currState = sv.currState[:args.Position-1] + sv.currState[args.Position:]
-			}
-		}
+		sv.useOperationAndUpdate(*args)
 		sv.clients[args.Uid] =  args.Version + 1
-		sv.version = args.VersionS + 1 // SINCE WE APPLIED FUNCTION, we can update server version
-		sv.logs = append(sv.logs, *args)
-
 		resp.Logs[0].OpType = "good"
 		resp.Logs[0].VersionS = sv.version
-	} else if sv.clients[args.Uid] < args.Version && sv.version > args.VersionS {
-		// diverging situation
-		// ex if cl at (1,0) and args at (0,1)
-		// we want to apply args' such that cl will end up at (1,1)
-		logTemp := sv.getLogVersion(args.Version)
-		if logTemp.Position < args.Position{
-			// modify where we actually want to insert
-			// since a previous insert will mess up position
-			if logTemp.OpType == "ins" { args.Position += 1
-			} else if logTemp.OpType == "del" {args.Position -= 1}
-		}
-		if args.OpType == "ins" {
-			// sv.currState += args.Payload
-			if args.Position == 0 {
-				sv.currState = args.Payload + sv.currState // append at beginning
-			} else {
-				sv.currState = sv.currState[:args.Position] + args.Payload + sv.currState[args.Position:]
-			}
-		} else {
-			if args.Position == len(sv.currState) && len(sv.currState) != 0 {
-				sv.currState = sv.currState[:args.Position-1]
-			} else {
-				sv.currState = sv.currState[:args.Position-1] + sv.currState[args.Position:]
-			}
-		}
-		sv.clients[args.Uid] = args.Version + 1 // update server version kept on args
-		sv.logs = append(sv.logs, *args) // append the modified logs
+	} else {
+		// process the correct transformation
+		// append to log, apply operation etc
 
+		if args.VersionS == sv.version -1 {
+			// if client just one behind, the transformation is simple
+
+			a1, _ := op.Xform(*args, sv.getLogVersion(args.VersionS)) // do the transformation
+			sv.useOperationAndUpdate(a1)
+			sv.clients[args.Uid] =  sv.version // assuming operation sent back
+			resp.Logs[0] = sv.getLogVersion(args.VersionS)
+			// resp.Logs[0].VersionS = args.VersionS // since operation already done on server side, using temporary code, send back to client correct operation
+
+		} else {
+			fmt.Println("ApplyTransformation haven't dealt with this situation")
+		}
 	}
+
 	fmt.Println("ApplyTransformation now: ", strings.Replace(sv.currState, "\n", "\\n", -1))
 	fmt.Println("Clients version", sv.clients, sv.version)
 	fmt.Println("logs", sv.logs)
 	fmt.Println("replying", resp)
-
 
 	return nil
 }
