@@ -53,17 +53,23 @@ func NewOTClient() *OTClient {
 			time.Sleep(time.Duration(sleep)*time.Millisecond) // some time/duration bug
 			empty.Version = cl.version // update version
 			empty.VersionS = cl.versionS // update version
-			var reply op.Op
-			err := cl.rpc_client.Call("OTServer.ApplyOp", empty, &reply)
+			var reply op.OpReply
+			reply.Logs = make([]op.Op,1)
+			reply.Logs[0].Payload = "u"
+			reply.Num = 3
+			if cl.Debug{
+					fmt.Println("client to call", empty, reply)
+				}
+			err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if reply.OpType != "empty" {
+			if reply.Logs[0].OpType != "empty" {
 				sleep = 10 // instantly request more
 				if cl.Debug{
 					fmt.Println("client behind; received", reply)
 				}
-				cl.receive(reply) // do some OT
+				cl.receive(reply.Logs[0]) // do some OT
 			} else {
 				sleep = 1000 // go back to periodical
 			}
@@ -150,15 +156,16 @@ func (cl *OTClient) RandOp() {
 }
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
-	var reply op.Op
+	var reply op.OpReply
+	reply.Logs = make([]op.Op, 1) // make at least one, let server append
 	cl.logs = append(cl.logs, *args) // add to logs
 	cl.addCurrState(*args) // do some OT
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
 	}
-	cl.receive(reply)
-	return reply
+	cl.receive(reply.Logs[0])
+	return reply.Logs[0]
 }
 
 func (cl *OTClient) receive(args op.Op) {

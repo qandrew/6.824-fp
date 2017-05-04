@@ -41,7 +41,7 @@ func (sv *OTServer) Init(clientID int64, resp *bool) error {
 	return nil
 }
 
-func (sv *OTServer) ApplyOp(args *op.Op, resp *op.Op) error {
+func (sv *OTServer) ApplyOp(args *op.Op, resp *op.OpReply) error {
 	// operation called by the client
 	// fmt.Println(args)
 	var err error
@@ -62,30 +62,35 @@ func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
 	return nil
 }
 
-func (sv *OTServer) Broadcast(args *op.Op, resp *op.Op) error {
+func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 	// if sv.clients[args.Uid] > args.Version {
 	// 	return errors.New("Broadcast: client missing operation, out of order")
 	// }
+	resp.Logs = make([]op.Op,1)
+	fmt.Println("received", args, sv.version, len(resp.Logs), resp)
 	if sv.version > args.Version { // server ahead of client
-		// args.Version guaranteed to be >= 1
-		*resp = sv.logs[args.Version-1] // return the next log
 		fmt.Println("broadcast to", args.Uid, resp)
+		// args.Version guaranteed to be >= 1
+		resp.Logs[0] = sv.logs[args.Version-1] // return the next log
 
 		sv.clients[args.Uid] += 1 // assume that client will be able to resolve
 		// tho technically we might need an ack from client
 	} else {
-		// fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
-		resp.OpType = "empty" // client is at same state as server
+		fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
+		resp.Logs[0].OpType = "empty" // client is at same state as server
 	}
+	fmt.Println("processed", resp)
 
 	return nil
 }
 
-func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
+func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 	fmt.Println("incoming op ", args)
 	if args.OpType != "ins" && args.OpType != "del" {
 		log.Fatal(errors.New("xform: wrong operation input"))
 	}
+
+	resp.Logs = make([]op.Op,1) // make a new entry in resp logs
 
 	if args.VersionS == sv.version && args.Version == sv.clients[args.Uid] {
 		// in this case, we don't need to do any transforms
@@ -107,8 +112,8 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 		sv.version = args.VersionS + 1 // SINCE WE APPLIED FUNCTION, we can update server version
 		sv.logs = append(sv.logs, *args)
 
-		resp.OpType = "good"
-		resp.VersionS = sv.version
+		resp.Logs[0].OpType = "good"
+		resp.Logs[0].VersionS = sv.version
 	} else if sv.clients[args.Uid] < args.Version && sv.version > args.VersionS {
 		// diverging situation
 		// ex if cl at (1,0) and args at (0,1)

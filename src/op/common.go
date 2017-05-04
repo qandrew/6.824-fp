@@ -16,10 +16,11 @@ type Snapshot struct {
   VersionS int 	// version of server
 }
 
-// type Logs struct {
-//   // this structure contains all operation logs
-//   Logs      []Op
-// }
+type OpReply struct {
+  // this structure contains all operation logs
+  Logs      []Op
+  Num		int // idk debug purpose?
+}
 
 // Applies an operation to a string. Returns an error if the operation is not possible w/ the string
 /*
