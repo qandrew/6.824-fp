@@ -164,9 +164,9 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 func (cl *OTClient) receive(args op.Op) {
 	if args.OpType == "empty"{
 		// don't do anything
-/*	} else if reply.OpType == "good" {
-		cl.versionS = reply.VersionS // update server version
-*/
+	} else if args.OpType == "good" {
+		cl.versionS = args.VersionS // update server version
+
 	} else if args.OpType == "ins" || args.OpType == "del"{
 /*		if args.OpType != "ins" && args.OpType != "del" {
 			log.Fatal(errors.New("xform: wrong operation input"))
@@ -176,6 +176,9 @@ func (cl *OTClient) receive(args op.Op) {
 			// in this case, we don't need to do any transforms
 			cl.addCurrState(args)
 			cl.versionS = args.VersionS + 1 // SINCE WE APPLIED FUNCTION, we can update server version
+			if cl.version < cl.versionS {
+				cl.version = cl.versionS
+			}
 			cl.logs = append(cl.logs, args)
 			if cl.Debug{
 				fmt.Println("xform normal: now", cl.currState, "ver", cl.version, "serv", cl.versionS)

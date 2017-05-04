@@ -141,6 +141,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.Op) error {
 	fmt.Println("ApplyTransformation now: ", strings.Replace(sv.currState, "\n", "\\n", -1))
 	fmt.Println("Clients version", sv.clients, sv.version)
 	fmt.Println("logs", sv.logs)
+	fmt.Println("replying", resp)
 
 
 	return nil

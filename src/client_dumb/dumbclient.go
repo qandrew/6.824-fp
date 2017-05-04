@@ -14,6 +14,6 @@ func main() {
 	}
 	for {
 		time.Sleep(2*client_common.SLEEP*time.Millisecond)
-		cl.RandOp()
+		// cl.RandOp()
 	}
 }
