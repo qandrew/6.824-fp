@@ -231,6 +231,14 @@ func start_ui(cl *client_common.OTClient) {
 		log.Panicln(err)
 	}
 
+	v, err := g.View("main")
+	cl.RegisterInsertCb(func(pos int, ch rune) {
+		v.WriteRuneAtPos(pos, ch)
+	})
+	cl.RegisterDeleteCb(func(pos int) {
+		v.DeleteRuneAtPos(pos)
+	})
+
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
 	}

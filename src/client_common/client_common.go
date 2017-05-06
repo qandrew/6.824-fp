@@ -2,14 +2,14 @@ package client_common
 
 import (
 	randC "crypto/rand"
-	r "math/rand"
+	"fmt"
 	"log"
 	"math/big"
+	r "math/rand"
 	"net/rpc"
 	"op"
 	"time"
-	"fmt"
-//	"errors"
+	//	"errors"
 	"strconv"
 )
 
@@ -19,13 +19,16 @@ type OTClient struct {
 	rpc_client *rpc.Client
 	uid        int64
 	logs       []op.Op // logs of all operations
-	currState  string // current state of text
-	version    int // client side sent
+	currState  string  // current state of text
+	version    int     // client side sent
 
-	versionS   int // client side received
-	Debug 	   bool
+	versionS int // client side received
+	Debug    bool
 
-	outgoing   chan op.Op
+	insertCb func(int, rune)
+	deleteCb func(int)
+
+	outgoing chan op.Op
 }
 
 func NewOTClient() *OTClient {
@@ -38,35 +41,39 @@ func NewOTClient() *OTClient {
 
 	cl.uid = nrand()
 	cl.versionS = 1 // let the starting state be (1,1)
-	cl.version = 1 // let the starting state be (1,1)
+	cl.version = 1  // let the starting state be (1,1)
 	cl.Debug = false
 	cl.outgoing = make(chan op.Op, 100)
+
+	cl.insertCb = func(x int, ch rune) { /* noop */ }
+	cl.deleteCb = func(x int) { /* noop */ }
+
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
-	go func(){
+	go func() {
 		var empty op.Op
 		sleep := 1000
 		empty.Uid = cl.uid
 		empty.OpType = "empty"
 		for {
-			time.Sleep(time.Duration(sleep)*time.Millisecond) // some time/duration bug
-			empty.Version = cl.version // update version
-			empty.VersionS = cl.versionS // update version
+			time.Sleep(time.Duration(sleep) * time.Millisecond) // some time/duration bug
+			empty.Version = cl.version                          // update version
+			empty.VersionS = cl.versionS                        // update version
 			var reply op.OpReply
-			reply.Logs = make([]op.Op,1)
+			reply.Logs = make([]op.Op, 1)
 			reply.Logs[0].Payload = "u"
 			reply.Num = 3
-			if cl.Debug{
-					fmt.Println("client to call", empty, reply)
-				}
+			if cl.Debug {
+				fmt.Println("client to call", empty, reply)
+			}
 			err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
 			if err != nil {
 				log.Fatal(err)
 			}
 			if reply.Logs[0].OpType != "empty" {
 				sleep = 10 // instantly request more
-				if cl.Debug{
+				if cl.Debug {
 					fmt.Println("client behind; received", reply)
 				}
 				cl.receive(reply.Logs[0]) // do some OT
@@ -79,10 +86,18 @@ func NewOTClient() *OTClient {
 	return cl
 }
 
-func (cl *OTClient) getLogVersion (i int) op.Op{
+func (cl *OTClient) RegisterInsertCb(f func(int, rune)) {
+	cl.insertCb = f
+}
+
+func (cl *OTClient) RegisterDeleteCb(f func(int)) {
+	cl.deleteCb = f
+}
+
+func (cl *OTClient) getLogVersion(i int) op.Op {
 	// return the log with version index i
 	// in case we condense log in future
-	if cl.logs[i-1].Version == i{
+	if cl.logs[i-1].Version == i {
 		return cl.logs[i-1]
 	}
 	fmt.Println("fuck")
@@ -105,7 +120,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 			cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
 		}
 	}
-	if cl.Debug{
+	if cl.Debug {
 		fmt.Println("addCurrState: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
 	}
 }
@@ -132,13 +147,13 @@ func (cl *OTClient) addVersion() int {
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
-	args := op.Op{"ins", pos, cl.addVersion(),cl.versionS,cl.uid, string(ch)}
+	args := op.Op{"ins", pos, cl.addVersion(), cl.versionS, cl.uid, string(ch)}
 	cl.SendOp(&args)
 }
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{"del", pos, cl.addVersion(),cl.versionS,cl.uid, ""}
+		args := op.Op{"del", pos, cl.addVersion(), cl.versionS, cl.uid, ""}
 		cl.SendOp(&args)
 	}
 }
@@ -146,10 +161,13 @@ func (cl *OTClient) Delete(pos int) {
 func (cl *OTClient) RandOp() {
 	// let the client do a random operation
 	var pos int
-	if len(cl.currState) == 0{ pos = 0
-	} else { pos = r.Intn(len(cl.currState))}
+	if len(cl.currState) == 0 {
+		pos = 0
+	} else {
+		pos = r.Intn(len(cl.currState))
+	}
 	val := strconv.Itoa(r.Intn(9))
-	args := op.Op{"ins", pos, cl.addVersion(),cl.versionS,cl.uid, val}
+	args := op.Op{"ins", pos, cl.addVersion(), cl.versionS, cl.uid, val}
 	fmt.Println("calling", args)
 	cl.SendOp(&args)
 
@@ -157,9 +175,9 @@ func (cl *OTClient) RandOp() {
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	var reply op.OpReply
-	reply.Logs = make([]op.Op, 1) // make at least one, let server append
+	reply.Logs = make([]op.Op, 1)    // make at least one, let server append
 	cl.logs = append(cl.logs, *args) // add to logs
-	cl.addCurrState(*args) // do some OT
+	cl.addCurrState(*args)           // do some OT
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
@@ -169,16 +187,16 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 }
 
 func (cl *OTClient) receive(args op.Op) {
-	if args.OpType == "empty"{
+	if args.OpType == "empty" {
 		// don't do anything
 	} else if args.OpType == "good" {
 		cl.versionS = args.VersionS // update server version
 
-	} else if args.OpType == "ins" || args.OpType == "del"{
-/*		if args.OpType != "ins" && args.OpType != "del" {
-			log.Fatal(errors.New("xform: wrong operation input"))
-		}
-*/
+	} else if args.OpType == "ins" || args.OpType == "del" {
+		/*		if args.OpType != "ins" && args.OpType != "del" {
+					log.Fatal(errors.New("xform: wrong operation input"))
+				}
+		*/
 		if args.VersionS == cl.versionS && args.Version == cl.version {
 			// in this case, we don't need to do any transforms
 			cl.addCurrState(args)
@@ -187,7 +205,7 @@ func (cl *OTClient) receive(args op.Op) {
 				cl.version = cl.versionS
 			}
 			cl.logs = append(cl.logs, args)
-			if cl.Debug{
+			if cl.Debug {
 				fmt.Println("xform normal: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
 			}
 		} else if cl.version > args.Version && cl.versionS < args.VersionS {
@@ -195,11 +213,14 @@ func (cl *OTClient) receive(args op.Op) {
 			// ex if cl at (1,0) and args at (0,1)
 			// we want to apply args' such that cl will end up at (1,1)
 			logTemp := cl.getLogVersion(args.Version)
-			if logTemp.Position < args.Position{
+			if logTemp.Position < args.Position {
 				// modify where we actually want to insert
 				// since a previous insert will mess up position
-				if logTemp.OpType == "ins" { args.Position += 1
-				} else if logTemp.OpType == "del" {args.Position -= 1}
+				if logTemp.OpType == "ins" {
+					args.Position += 1
+				} else if logTemp.OpType == "del" {
+					args.Position -= 1
+				}
 			}
 			if args.OpType == "ins" {
 				// cl.currState += args.Payload
@@ -215,13 +236,13 @@ func (cl *OTClient) receive(args op.Op) {
 					cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
 				}
 			}
-			cl.versionS = args.VersionS // update server version kept on args
+			cl.versionS = args.VersionS     // update server version kept on args
 			cl.logs = append(cl.logs, args) // append the modified logs
-			if cl.Debug{
+			if cl.Debug {
 				fmt.Println("xform diverge: now", cl.currState, "ver", cl.version, "serv", cl.versionS)
 			}
 		}
-		if cl.Debug{
+		if cl.Debug {
 			fmt.Println("xform: now", cl.currState, "ver", cl.version, "serv", cl.versionS, "logs", cl.logs)
 		}
 	}

@@ -26,6 +26,32 @@ func (f EditorFunc) Edit(v *View, key Key, ch rune, mod Modifier) {
 // DefaultEditor is the default editor.
 var DefaultEditor Editor = EditorFunc(simpleEditor)
 
+func findPos(v *View, pos int) (int, int) {
+	line := 0
+	for line < len(v.lines) && pos >= len(v.lines[line])+1 {
+		pos -= len(v.lines[line]) + 1
+		line++
+	}
+	if line >= len(v.lines) {
+		v.lines = append(v.lines, make([]cell, 0))
+	}
+	return line, pos
+}
+
+func (v *View) WriteRuneAtPos(pos int, ch rune) {
+	x, y := findPos(v, pos)
+	if ch == '\n' {
+		v.breakLineReal(x, y)
+	} else {
+		v.writeRuneReal(x, y, ch)
+	}
+}
+
+func (v *View) DeleteRuneAtPos(pos int) {
+	x, y := findPos(v, pos)
+	v.editDeleteAt(x, y, false)
+}
+
 // simpleEditor is used as the default gocui editor.
 func simpleEditor(v *View, key Key, ch rune, mod Modifier) {
 	switch {
@@ -62,18 +88,24 @@ func (v *View) EditWrite(ch rune) {
 // direction.
 func (v *View) EditDelete(back bool) {
 	x, y := v.ox+v.cx, v.oy+v.cy
-	if y < 0 {
-		return
-	} else if y >= len(v.viewLines) {
+	moveCursorUp := v.editDeleteAt(x, y, back)
+	if moveCursorUp {
 		v.MoveCursor(-1, 0, true)
-		return
+	}
+}
+
+func (v *View) editDeleteAt(x, y int, back bool) bool {
+	if y < 0 {
+		return false
+	} else if y >= len(v.viewLines) {
+		return true
 	}
 
 	maxX, _ := v.Size()
 	if back {
 		if x == 0 { // start of the line
 			if y < 1 {
-				return
+				return false
 			}
 
 			var maxPrevWidth int
@@ -86,15 +118,15 @@ func (v *View) EditDelete(back bool) {
 			if v.viewLines[y].linesX == 0 { // regular line
 				v.mergeLines(v.cy - 1)
 				if len(v.viewLines[y-1].line) < maxPrevWidth {
-					v.MoveCursor(-1, 0, true)
+					return true
 				}
 			} else { // wrapped line
 				v.deleteRune(len(v.viewLines[y-1].line)-1, v.cy-1)
-				v.MoveCursor(-1, 0, true)
+				return true
 			}
 		} else { // middle/end of the line
 			v.deleteRune(v.cx-1, v.cy)
-			v.MoveCursor(-1, 0, true)
+			return true
 		}
 	} else {
 		if x == len(v.viewLines[y].line) { // end of the line
@@ -103,6 +135,7 @@ func (v *View) EditDelete(back bool) {
 			v.deleteRune(v.cx, v.cy)
 		}
 	}
+	return false
 }
 
 // EditNewLine inserts a new line under the cursor.
@@ -241,12 +274,17 @@ func (v *View) MoveCursor(dx, dy int, writeMode bool) {
 // buffer is increased if the point is out of bounds. Overwrite mode is
 // governed by the value of View.overwrite.
 func (v *View) writeRune(x, y int, ch rune) error {
-	v.tainted = true
 
 	x, y, err := v.realPosition(x, y)
 	if err != nil {
 		return err
 	}
+
+	return v.writeRuneReal(x, y, ch)
+}
+
+func (v *View) writeRuneReal(x, y int, ch rune) error {
+	v.tainted = true
 
 	if x < 0 || y < 0 {
 		return errors.New("invalid point")
@@ -280,12 +318,16 @@ func (v *View) writeRune(x, y int, ch rune) error {
 // deleteRune removes a rune from the view's internal buffer, at the
 // position corresponding to the point (x, y).
 func (v *View) deleteRune(x, y int) error {
-	v.tainted = true
-
 	x, y, err := v.realPosition(x, y)
 	if err != nil {
 		return err
 	}
+
+	return v.deleteRuneReal(x, y)
+}
+
+func (v *View) deleteRuneReal(x, y int) error {
+	v.tainted = true
 
 	if x < 0 || y < 0 || y >= len(v.lines) || x >= len(v.lines[y]) {
 		return errors.New("invalid point")
@@ -317,13 +359,17 @@ func (v *View) mergeLines(y int) error {
 // breakLine breaks a line of the internal buffer at the position corresponding
 // to the point (x, y).
 func (v *View) breakLine(x, y int) error {
-	v.tainted = true
 
 	x, y, err := v.realPosition(x, y)
 	if err != nil {
 		return err
 	}
 
+	return v.breakLineReal(x, y)
+}
+
+func (v *View) breakLineReal(x, y int) error {
+	v.tainted = true
 	if y < 0 || y >= len(v.lines) {
 		return errors.New("invalid point")
 	}
