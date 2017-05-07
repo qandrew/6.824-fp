@@ -77,9 +77,9 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 	resp.Logs = make([]op.Op,1)
 	// fmt.Println("received", args, sv.version, len(resp.Logs), resp)
 	if sv.version > args.Version { // server ahead of client
-		fmt.Println("broadcast to", args.Uid, resp)
 		// args.Version guaranteed to be >= 1
 		resp.Logs[0] = sv.logs[args.Version-1] // return the next log
+		fmt.Println("broadcast to", args.Uid, resp)
 
 		sv.clients[args.Uid] += 1 // assume that client will be able to resolve
 		// tho technically we might need an ack from client

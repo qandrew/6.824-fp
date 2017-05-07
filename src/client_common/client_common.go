@@ -93,13 +93,10 @@ func NewOTClient() *OTClient {
 				log.Fatal(err)
 			}
 			if reply.Logs[0].OpType != "empty" {
-				sleep = 10 // instantly request more
 				if cl.Debug {
 					fmt.Println("client behind; received", reply)
 				}
 				cl.receive(reply.Logs[0]) // do some OT
-			} else {
-				sleep = 1000 // go back to periodical
 			}
 		}
 	}()
