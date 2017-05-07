@@ -41,7 +41,6 @@ func NewOTClient() *OTClient {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter IP addr (empty for localhost): ")
 	text, _ := reader.ReadString('\n')
-	fmt.Println(len(text))
 	if len(text) == 1{
 		text = "localhost:42586"
 		fmt.Println("addr\t", text)
