@@ -11,6 +11,10 @@ import (
 	"time"
 	//	"errors"
 	"strconv"
+
+	// for reading in
+	"bufio"
+	"os"
 )
 
 const SLEEP = 1000
@@ -33,7 +37,25 @@ type OTClient struct {
 
 func NewOTClient() *OTClient {
 	cl := &OTClient{}
-	rpc_client, err := rpc.Dial("tcp", "localhost:42586")
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter IP addr (empty for localhost): ")
+	text, _ := reader.ReadString('\n')
+	fmt.Println(len(text))
+	if len(text) == 1{
+		text = "localhost:42586"
+		fmt.Println("addr\t", text)
+	} else {
+		text = text[:len(text)-1] + ":42586"
+		fmt.Println("addr\t", text)
+	}
+	time.Sleep(SLEEP * time.Millisecond) // some time/duration bug
+	// in := bufio.NewReader(os.Stdin)
+	// str := in.ReadString('\n')
+	// if len(str) == 0{
+	// 	fmt.Println("setting to localhost")
+	// }
+	rpc_client, err := rpc.Dial("tcp", text)
 	cl.rpc_client = rpc_client
 	if err != nil {
 		log.Fatal(err)

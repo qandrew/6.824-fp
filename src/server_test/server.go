@@ -11,6 +11,10 @@ import (
 	"op"
 	"strings"
 	"sync"
+
+	// for reading in
+	"bufio"
+	"os"
 )
 
 type OTServer struct {
@@ -131,7 +135,20 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 }
 
 func main() {
-	addy, err := net.ResolveTCPAddr("tcp", "localhost:42586")
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter IP addr (empty for localhost): ")
+	text, _ := reader.ReadString('\n')
+	fmt.Println(len(text))
+	if len(text) == 1{
+		text = "localhost:42586"
+		fmt.Println("addr\t", text)
+	} else {
+		text = text[:len(text)-1] + ":42586"
+		fmt.Println("addr\t", text)
+	}
+
+	addy, err := net.ResolveTCPAddr("tcp", text)
 	if err != nil {
 		log.Fatal(err)
 	}
