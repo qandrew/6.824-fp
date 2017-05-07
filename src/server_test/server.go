@@ -35,6 +35,10 @@ func (sv *OTServer) getLogVersion (i int) op.Op{
 	return sv.logs[i-1]
 }
 
+func (sv *OTServer) getLastLogVersion() int {
+	return sv.logs[len(sv.logs)-1].Version
+}
+
 func (sv *OTServer) Init(clientID int64, resp *bool) error {
 	if _, ok :=sv.clients[clientID]; !ok {
 		sv.clients[clientID] = 1
@@ -59,7 +63,7 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *op.OpReply) error {
 }
 
 func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
-	resp.VersionS = sv.version // respond with version also
+	// resp.VersionS = sv.version // respond with version also
 	resp.Value = sv.currState
 	sv.clients[req.Uid] = sv.version // assume that client can force update
 	fmt.Println("Snapshot to", req.Uid, sv.clients)
@@ -102,6 +106,28 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 		log.Fatal(errors.New("xform: wrong operation input"))
 	}
 	resp.Logs = make([]op.Op,1) // make a new entry in resp logs
+
+	if args.Version == sv.version {
+		// in this case, we don't need to do any transforms
+		// Make this shit into some function
+		sv.useOperationAndUpdate(*args)
+		sv.clients[args.Uid] =  args.Version + 1
+
+		resp.Logs[0].OpType = "good"
+		// resp.Logs[0].VersionS = sv.version
+	} else if args.Version < sv.version {
+		// diverging situation
+		// ex if cl at (1,0) and args at (0,1)
+		// we want to apply args' such that cl will end up at (1,1)
+		tempArg := *args
+		transformIndex := args.Version
+
+		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
+			tempArg, _ = op.Xform(tempArg, sv.getLogVersion(transformIndex))
+		}
+
+		sv.useOperationAndUpdate(tempArg)
+/*
 	if args.VersionS == sv.version && args.Version == sv.clients[args.Uid] {
 		// in this case, we don't need to do any transforms
 		sv.useOperationAndUpdate(*args)
@@ -124,10 +150,15 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 		} else {
 			fmt.Println("ApplyTransformation haven't dealt with this situation")
 		}
+		*/
+		sv.clients[args.Uid] = args.Version + 1 // update server version kept on args
+		sv.logs = append(sv.logs, tempArg) // append the modified logs
+	} else {
+		fmt.Println("ERROR: client version higher than the server version")
 	}
 
 	fmt.Println("ApplyTransformation now: ", strings.Replace(sv.currState, "\n", "\\n", -1))
-	fmt.Println("Clients version", sv.clients, sv.version)
+	// fmt.Println("Clients version", sv.clients, sv.version)
 	fmt.Println("logs", sv.logs)
 	fmt.Println("replying", resp)
 
@@ -135,18 +166,16 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 }
 
 func main() {
-
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter IP addr (empty for localhost): ")
 	text, _ := reader.ReadString('\n')
-	if len(text) == 1{
+	if len(text) == 1 {
 		text = "localhost:42586"
 		fmt.Println("addr\t", text)
 	} else {
 		text = text[:len(text)-1] + ":42586"
 		fmt.Println("addr\t", text)
 	}
-
 	addy, err := net.ResolveTCPAddr("tcp", text)
 	if err != nil {
 		log.Fatal(err)
