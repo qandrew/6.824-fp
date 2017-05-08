@@ -79,13 +79,14 @@ func NewOTClient() *OTClient {
 			time.Sleep(time.Duration(sleep)*time.Millisecond) // some time/duration bug
 			empty.Version = cl.version // update version
 			// empty.VersionS = cl.versionS // update version
+			// cl.insertCb(0,'a')
 			var reply op.OpReply
 			reply.Logs = make([]op.Op, 1)
 			reply.Logs[0].Payload = "u"
 			reply.Num = 3
-			if cl.Debug {
-				fmt.Println("client to call", empty, reply)
-			}
+			// if cl.Debug {
+			// 	fmt.Println("client to call", empty, reply)
+			// }
 			err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
 			if err != nil {
 				log.Fatal(err)
@@ -117,11 +118,19 @@ func (cl *OTClient) RegisterDeleteCb(f func(int)) {
 func (cl *OTClient) getLogVersion(i int) op.Op {
 	// return the log with version index i
 	// in case we condense log in future
-	if cl.logs[i-1].Version == i {
+	if cl.logs[i-1].Version == i { // we 1 index
+		return cl.logs[i-1]
+	// } else cl.logs[i-1].Version == i {
+
+	} else {
+		for _, log := range cl.logs {
+			if log.Version == i{
+				return log
+			}
+		}
+		fmt.Println("FUCK CANT GET CORRECT LOG")
 		return cl.logs[i-1]
 	}
-	fmt.Println("fuck")
-	return cl.logs[i-1]
 }
 
 func (cl *OTClient) addCurrState(args op.Op) {
@@ -133,15 +142,16 @@ func (cl *OTClient) addCurrState(args op.Op) {
 		} else {
 			cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
 		}
-	} else {
+	} else { // "del"
 		if args.Position == len(cl.currState) && len(cl.currState) != 0 {
 			cl.currState = cl.currState[:args.Position-1]
 		} else {
 			cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
 		}
 	}
+	cl.logs = append(cl.logs, args) // add to logs
 	if cl.Debug {
-		fmt.Println("addCurrState: now", cl.currState, "ver", cl.version)
+		fmt.Println("addCurrState: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 	}
 }
 
@@ -155,6 +165,9 @@ func (cl *OTClient) GetSnapshot() string {
 		cl.version = snap.VersionS
 		// cl.versionS = snap.VersionS
 		cl.currState = snap.Value // this might not be safe?
+	}
+	if cl.Debug {
+		fmt.Println("shapshot got", snap, "now ver", cl.version, "currState", cl.currState)
 	}
 	return snap.Value
 }
@@ -199,10 +212,14 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	// TODO: when the buffer is implemented, SendOp should probably just add the op to the buffer.
 	var reply op.OpReply
 
+	if cl.Debug {
+		fmt.Println("calling sendop", args)
+	}
+
 	cl.outgoingQueue = append(cl.outgoingQueue, *args)
 	reply.Logs = make([]op.Op, 1) // make at least one, let server append
-	cl.logs = append(cl.logs, *args) // add to logs
-
+	// cl.logs = append(cl.logs, *args) // add to logs, implicit in addcurrstate
+	cl.addCurrState(*args) // add to current state and append logs
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
@@ -221,6 +238,9 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 func (cl *OTClient) receiveSingleLog(args op.Op) {
 	// once one log is received, xform everything in the buffer
 	// furthermore, xform the current state with the transformed log
+	if cl.Debug {
+		fmt.Println("received", args)
+	}
 	if args.OpType == "empty" || args.OpType == "noOp" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
@@ -232,7 +252,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		}
 
 		cl.addCurrState(temp)
-		cl.version++
+		cl.version++ // not sure if this is correct
 		/*
 		Here's a shitty schematic of the above operations
 

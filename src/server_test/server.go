@@ -65,6 +65,7 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *op.OpReply) error {
 func (sv *OTServer) GetSnapshot(req *op.Snapshot, resp *op.Snapshot) error {
 	// resp.VersionS = sv.version // respond with version also
 	resp.Value = sv.currState
+	resp.VersionS = sv.version
 	sv.clients[req.Uid] = sv.version // assume that client can force update
 	fmt.Println("Snapshot to", req.Uid, sv.clients)
 	return nil
