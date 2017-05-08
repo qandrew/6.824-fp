@@ -26,7 +26,7 @@ type OTServer struct {
 	clients   map[int64]int //*rpc.Client keep track of version num
 }
 
-func (sv *OTServer) getLogVersion (i int) op.Op{
+func (sv *OTServer) getLogByVersion (i int) op.Op{
 	// return the log with version index i
 	if sv.logs[i-1].Version == i{
 		return sv.logs[i-1]
@@ -79,10 +79,11 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 	// fmt.Println("received", args, sv.version, len(resp.Logs), resp)
 	if sv.version > args.Version { // server ahead of client
 		// args.Version guaranteed to be >= 1
-		resp.Logs[0] = sv.logs[args.Version-1] // return the next log
-		fmt.Println("broadcast to", args.Uid, resp)
+		resp.Logs = make([]op.Op,len(sv.logs)-args.Version)
+		resp.Logs = sv.logs[args.Version-1:] // return all missing logs
+		fmt.Println("broadcast to", args, resp)
 
-		sv.clients[args.Uid] += 1 // assume that client will be able to resolve
+		sv.clients[args.Uid] = sv.version // assume that client will be able to resolve all conflicts
 		// tho technically we might need an ack from client
 	} else {
 		// fmt.Println("broadcast up to date", args.Uid, sv.version, sv.clients[args.Uid] )
@@ -123,37 +124,42 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 		tempArg := *args
 		transformIndex := args.Version
 
+		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version)
 		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
-			tempArg, _ = op.Xform(tempArg, sv.getLogVersion(transformIndex))
+
+			t1 := sv.getLogByVersion(transformIndex)
+			if t1.Uid != tempArg.Uid { // don't do OT on operations from same client
+				tempArg, _ = op.Xform(tempArg, t1)
+			}
 		}
 
 		sv.useOperationAndUpdate(tempArg)
-/*
-	if args.VersionS == sv.version && args.Version == sv.clients[args.Uid] {
-		// in this case, we don't need to do any transforms
-		sv.useOperationAndUpdate(*args)
-		sv.clients[args.Uid] =  args.Version + 1
-		resp.Logs[0].OpType = "good"
-		resp.Logs[0].VersionS = sv.version
-	} else {
-		// process the correct transformation
-		// append to log, apply operation etc
-
-		if args.VersionS == sv.version -1 {
-			// if client just one behind, the transformation is simple
-
-			a1, _ := op.Xform(*args, sv.getLogVersion(args.VersionS)) // do the transformation
-			sv.useOperationAndUpdate(a1)
-			sv.clients[args.Uid] =  sv.version // assuming operation sent back
-			resp.Logs[0] = sv.getLogVersion(args.VersionS)
-			// resp.Logs[0].VersionS = args.VersionS // since operation already done on server side, using temporary code, send back to client correct operation
-
-		} else {
-			fmt.Println("ApplyTransformation haven't dealt with this situation")
-		}
-		*/
 		sv.clients[args.Uid] = args.Version + 1 // update server version kept on args
-		sv.logs = append(sv.logs, tempArg) // append the modified logs
+		// TODO: make sv.clients[] correct
+		/*
+			if args.VersionS == sv.version && args.Version == sv.clients[args.Uid] {
+				// in this case, we don't need to do any transforms
+				sv.useOperationAndUpdate(*args)
+				sv.clients[args.Uid] =  args.Version + 1
+				resp.Logs[0].OpType = "good"
+				resp.Logs[0].VersionS = sv.version
+			} else {
+				// process the correct transformation
+				// append to log, apply operation etc
+
+				if args.VersionS == sv.version -1 {
+					// if client just one behind, the transformation is simple
+
+					a1, _ := op.Xform(*args, sv.getLogByVersion(args.VersionS)) // do the transformation
+					sv.useOperationAndUpdate(a1)
+					sv.clients[args.Uid] =  sv.version // assuming operation sent back
+					resp.Logs[0] = sv.getLogByVersion(args.VersionS)
+					// resp.Logs[0].VersionS = args.VersionS // since operation already done on server side, using temporary code, send back to client correct operation
+
+				} else {
+					fmt.Println("ApplyTransformation haven't dealt with this situation")
+				}
+		*/
 	} else {
 		fmt.Println("ERROR: client version higher than the server version")
 	}

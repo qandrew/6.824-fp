@@ -17,7 +17,7 @@ import (
 	"os"
 )
 
-const SLEEP = 1000
+const SLEEP = 1000 // longer for better OT debug, shorter for accurate performance
 
 type OTClient struct {
 	rpc_client *rpc.Client
@@ -73,14 +73,13 @@ func NewOTClient() *OTClient {
 
 	go func() {
 		var empty op.Op
-		sleep := 1000
 		empty.Uid = cl.uid
 		empty.OpType = "empty"
 		for {
-			time.Sleep(time.Duration(sleep) * time.Millisecond) // some time/duration bug
-			empty.Version = cl.version                          // update version
+			time.Sleep(SLEEP * time.Millisecond) // some time/duration bug
+			empty.Version = cl.version // update version
 			// empty.VersionS = cl.versionS // update version
-			// cl.insertCb(0,'a')
+			// cl.insertCb(0,'a') // testing, not correct
 			var reply op.OpReply
 			reply.Logs = make([]op.Op, 1)
 			reply.Logs[0].Payload = "u"
@@ -93,15 +92,14 @@ func NewOTClient() *OTClient {
 				log.Fatal(err)
 			}
 			if reply.Logs[0].OpType != "empty" {
-				sleep = 10 // instantly request more
 				if cl.Debug {
 					cl.Println("client behind; received", reply)
 				}
-				// TODO: change this to respond to all of the logs
-				cl.receiveSingleLog(reply.Logs[0]) // do some OT
-			} else {
-				sleep = 1000 // go back to periodical
-			}
+				//respond to all of the logs
+				for i := 0; i < len(reply.Logs); i++ {
+					cl.receiveSingleLog(reply.Logs[i])
+				}
+			} 
 		}
 	}()
 
@@ -218,7 +216,6 @@ func (cl *OTClient) RandOp() {
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), Uid: cl.uid, Payload: val}
 	cl.Println("calling", args)
 	cl.SendOp(&args)
-
 }
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
@@ -232,7 +229,9 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 
 	cl.outgoingQueue = append(cl.outgoingQueue, *args)
 	reply.Logs = make([]op.Op, 1) // make at least one, let server append
-	// cl.logs = append(cl.logs, *args) // add to logs, implicit in addcurrstate
+
+	// TODO: we need to do OT on args if we received ops in between
+	// the gui creating the args and sending it.	
 	cl.addCurrState(*args) // add to current state and append logs
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
@@ -243,7 +242,6 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	for i := 0; i < len(reply.Logs); i++ {
 		cl.receiveSingleLog(reply.Logs[i])
 	}
-	// cl.receiveSingleLog(reply.Logs[0])
 	// pop from the queue
 	cl.outgoingQueue = cl.outgoingQueue[1:]
 	return reply.Logs[0]
@@ -271,6 +269,11 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 				cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
 			}
 
+			if cl.Debug{
+				cl.Println("receive xform to add", temp, "cl ver", cl.version)
+			}
+			temp.Version = cl.version // overwrite the version
+			temp.VersionS = cl.version // overwrite the version, just in case
 			cl.addCurrState(temp)
 			r := []rune(temp.Payload)
 			cl.insertCb(temp.Position, r[0]) // not sure if it works
@@ -289,9 +292,6 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 
 			We need to apply the last value of temp locally
 			*/
-		}
-		if cl.Debug{
-			fmt.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
 	}
 }
