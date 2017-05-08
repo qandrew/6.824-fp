@@ -129,9 +129,12 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 
 			t1 := sv.getLogByVersion(transformIndex)
 			if t1.Uid != tempArg.Uid { // don't do OT on operations from same client
+				resp.Logs = append(resp.Logs,t1) // add it to the response
 				tempArg, _ = op.Xform(tempArg, t1)
 			}
 		}
+
+
 
 		sv.useOperationAndUpdate(tempArg)
 		sv.clients[args.Uid] = args.Version + 1 // update server version kept on args

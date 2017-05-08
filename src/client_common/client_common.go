@@ -161,7 +161,9 @@ func (cl *OTClient) addCurrState(args op.Op) {
 			cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
 		}
 	}
+	args.Version = cl.version // safety check?
 	cl.logs = append(cl.logs, args) // add to logs
+	cl.version++ // increment version only when we have appended it to logs
 	if cl.Debug {
 		cl.Println("addCurrState: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 	}
@@ -192,14 +194,14 @@ func (cl *OTClient) addVersion() int {
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
-	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), VersionS: 0,
+	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: 0,
 		Uid: cl.uid, Payload: string(ch)}
 	cl.SendOp(&args)
 }
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{OpType: "del", Position: pos, Version: cl.addVersion(), VersionS: 0, Payload: ""}
+		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, Payload: ""}
 		cl.SendOp(&args)
 	}
 }
@@ -213,26 +215,32 @@ func (cl *OTClient) RandOp() {
 		pos = r.Intn(len(cl.currState))
 	}
 	val := strconv.Itoa(r.Intn(9))
-	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), Uid: cl.uid, Payload: val}
+	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, Uid: cl.uid, Payload: val}
 	cl.Println("calling", args)
 	cl.SendOp(&args)
 }
 
 func (cl *OTClient) SendOp(args *op.Op) op.Op {
+	if cl.Debug { cl.Println("calling sendop", args)}
 	// TODO: make SendOp be able to edit the version number
 	// TODO: when the buffer is implemented, SendOp should probably just add the op to the buffer.
-	var reply op.OpReply
-
-	if cl.Debug {
-		cl.Println("calling sendop", args)
-	}
-
-	cl.outgoingQueue = append(cl.outgoingQueue, *args)
-	reply.Logs = make([]op.Op, 1) // make at least one, let server append
 
 	// TODO: we need to do OT on args if we received ops in between
 	// the gui creating the args and sending it.	
+
+	cl.outgoingQueue = append(cl.outgoingQueue, *args)
+
+	// if cl.version != args.version {
+	// 	// do OT on args to make sure that it's up to date
+	// 	for i := cl.version; i < len(cl.logs); i++ {
+	// 		args, _ = 
+	// 	}
+	// 	args.version = cl.version // update version also
+	// }
+
 	cl.addCurrState(*args) // add to current state and append logs
+	var reply op.OpReply
+	reply.Logs = make([]op.Op, 1) // make at least one, let server append
 	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
 	if err != nil {
 		log.Fatal(err)
@@ -258,9 +266,8 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	} else if args.OpType == "ins" || args.OpType == "del" {
 		if args.VersionS == cl.version {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
-			cl.version++ // increment version also
-			r := []rune(args.Payload) // convert string to rune
-			cl.insertCb(args.Position, r[0]) // when this works
+			// r := []rune(args.Payload) // convert string to rune
+			// cl.insertCb(args.Position, r[0]) // when this works
 		} else {
 			// We need to xform everything in the buffer
 			temp := args
@@ -277,7 +284,6 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			cl.addCurrState(temp)
 			r := []rune(temp.Payload)
 			cl.insertCb(temp.Position, r[0]) // not sure if it works
-			cl.version++ // not sure if this is correct
 			/*
 			Here's a shitty schematic of the above operations
 
