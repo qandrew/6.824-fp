@@ -23,16 +23,17 @@ type OTClient struct {
 	rpc_client *rpc.Client
 	uid        int64
 	logs       []op.Op // logs of all operations
-	currState  string // current state of text
-	version    int // version=x means that the client has processed all of the
-		       // server's messages up to x. If a message is send, it will be with
-		       // version x+1.
+	currState  string  // current state of text
+	version    int     // version=x means that the client has processed all of the
+	// server's messages up to x. If a message is send, it will be with
+	// version x+1.
 
 	// versionS   int // client side received
-	Debug 	   bool
+	Debug   bool
+	logFile *bufio.Writer
 
-	outgoingQueue     []op.Op // A queue of operations that have been locally
-				  // applied but messages have not been sent
+	outgoingQueue []op.Op // A queue of operations that have been locally
+	// applied but messages have not been sent
 
 	insertCb func(int, rune)
 	deleteCb func(int)
@@ -42,14 +43,14 @@ func NewOTClient() *OTClient {
 	cl := &OTClient{}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter IP addr (empty for localhost): ")
+	cl.Println("Enter IP addr (empty for localhost): ")
 	text, _ := reader.ReadString('\n')
 	if len(text) == 1 {
 		text = "localhost:42586"
-		fmt.Println("addr\t", text)
+		cl.Println("addr\t", text)
 	} else {
 		text = text[:len(text)-1] + ":42586"
-		fmt.Println("addr]t", text)
+		cl.Println("addr]t", text)
 	}
 	time.Sleep(SLEEP * time.Millisecond)
 	rpc_client, err := rpc.Dial("tcp", text)
@@ -76,8 +77,8 @@ func NewOTClient() *OTClient {
 		empty.Uid = cl.uid
 		empty.OpType = "empty"
 		for {
-			time.Sleep(time.Duration(sleep)*time.Millisecond) // some time/duration bug
-			empty.Version = cl.version // update version
+			time.Sleep(time.Duration(sleep) * time.Millisecond) // some time/duration bug
+			empty.Version = cl.version                          // update version
 			// empty.VersionS = cl.versionS // update version
 			// cl.insertCb(0,'a')
 			var reply op.OpReply
@@ -85,7 +86,7 @@ func NewOTClient() *OTClient {
 			reply.Logs[0].Payload = "u"
 			reply.Num = 3
 			// if cl.Debug {
-			// 	fmt.Println("client to call", empty, reply)
+			// 	cl.Println("client to call", empty, reply)
 			// }
 			err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
 			if err != nil {
@@ -94,7 +95,7 @@ func NewOTClient() *OTClient {
 			if reply.Logs[0].OpType != "empty" {
 				sleep = 10 // instantly request more
 				if cl.Debug {
-					fmt.Println("client behind; received", reply)
+					cl.Println("client behind; received", reply)
 				}
 				// TODO: change this to respond to all of the logs
 				cl.receiveSingleLog(reply.Logs[0]) // do some OT
@@ -105,6 +106,20 @@ func NewOTClient() *OTClient {
 	}()
 
 	return cl
+}
+
+func (cl *OTClient) Println(args ...interface{}) {
+	if cl.logFile != nil {
+		fmt.Fprintln(cl.logFile, args...)
+		cl.logFile.Flush()
+	} else {
+		fmt.Println(args...)
+	}
+}
+
+func (cl *OTClient) SetLogFile(filename string) {
+	f, _ := os.Create(filename)
+	cl.logFile = bufio.NewWriter(f)
 }
 
 func (cl *OTClient) RegisterInsertCb(f func(int, rune)) {
@@ -120,15 +135,14 @@ func (cl *OTClient) getLogVersion(i int) op.Op {
 	// in case we condense log in future
 	if cl.logs[i-1].Version == i { // we 1 index
 		return cl.logs[i-1]
-	// } else cl.logs[i-1].Version == i {
+		// } else cl.logs[i-1].Version == i {
 
 	} else {
 		for _, log := range cl.logs {
-			if log.Version == i{
+			if log.Version == i {
 				return log
 			}
 		}
-		fmt.Println("FUCK CANT GET CORRECT LOG")
 		return cl.logs[i-1]
 	}
 }
@@ -151,7 +165,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 	}
 	cl.logs = append(cl.logs, args) // add to logs
 	if cl.Debug {
-		fmt.Println("addCurrState: now", cl.currState, "ver", cl.version, "logs", cl.logs)
+		cl.Println("addCurrState: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 	}
 }
 
@@ -167,7 +181,7 @@ func (cl *OTClient) GetSnapshot() string {
 		cl.currState = snap.Value // this might not be safe?
 	}
 	if cl.Debug {
-		fmt.Println("shapshot got", snap, "now ver", cl.version, "currState", cl.currState)
+		cl.Println("shapshot got", snap, "now ver", cl.version, "currState", cl.currState)
 	}
 	return snap.Value
 }
@@ -181,7 +195,7 @@ func (cl *OTClient) addVersion() int {
 
 func (cl *OTClient) Insert(ch rune, pos int) {
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), VersionS: 0,
-			Uid: cl.uid, Payload: string(ch)}
+		Uid: cl.uid, Payload: string(ch)}
 	cl.SendOp(&args)
 }
 
@@ -202,7 +216,7 @@ func (cl *OTClient) RandOp() {
 	}
 	val := strconv.Itoa(r.Intn(9))
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), Uid: cl.uid, Payload: val}
-	fmt.Println("calling", args)
+	cl.Println("calling", args)
 	cl.SendOp(&args)
 
 }
@@ -213,7 +227,7 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	var reply op.OpReply
 
 	if cl.Debug {
-		fmt.Println("calling sendop", args)
+		cl.Println("calling sendop", args)
 	}
 
 	cl.outgoingQueue = append(cl.outgoingQueue, *args)
@@ -239,7 +253,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	// once one log is received, xform everything in the buffer
 	// furthermore, xform the current state with the transformed log
 	if cl.Debug {
-		fmt.Println("received", args)
+		cl.Println("received", args)
 	}
 	if args.OpType == "empty" || args.OpType == "noOp" {
 		// don't do anything
@@ -254,21 +268,21 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		cl.addCurrState(temp)
 		cl.version++ // not sure if this is correct
 		/*
-		Here's a shitty schematic of the above operations
+					Here's a shitty schematic of the above operations
 
-		 buf[0] /\
-		       /  \
-	      buf[1]  /\  / new buf[0]
-		     /  \/
-	    buf[2]  /\  / new buf[1]
-		   /  \/
-		   \  / new buf[2] and so on
-      temp (newest) \/
+					 buf[0] /\
+					       /  \
+				      buf[1]  /\  / new buf[0]
+					     /  \/
+				    buf[2]  /\  / new buf[1]
+					   /  \/
+					   \  / new buf[2] and so on
+			      temp (newest) \/
 
-		We need to apply the last value of temp locally
+					We need to apply the last value of temp locally
 		*/
-		if cl.Debug{
-			fmt.Println("xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
+		if cl.Debug {
+			cl.Println("xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
 	}
 }
