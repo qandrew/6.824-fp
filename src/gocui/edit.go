@@ -28,18 +28,30 @@ var DefaultEditor Editor = EditorFunc(simpleEditor)
 
 func findPos(v *View, pos int) (int, int) {
 	line := 0
-	for line < len(v.lines) && pos >= len(v.lines[line])+1 {
-		pos -= len(v.lines[line]) + 1
-		line++
+	linesExist := v.lines != nil
+	for linesExist && line < len(v.lines) {
+		ll := 0
+		if v.lines[line] == nil {
+			ll = 1
+		} else {
+			ll = len(v.lines[line]) + 1
+		}
+		if pos >= ll {
+			pos -= ll
+			line++
+		} else {
+			break
+		}
 	}
-	if line >= len(v.lines) {
-		v.lines = append(v.lines, make([]cell, 0))
+	if v.lines != nil && line >= len(v.lines) {
+		v.lines = append(v.lines, nil)
+		line++
 	}
 	return line, pos
 }
 
-func (v *View) WriteRuneAtPos(pos int, ch rune) {
-	x, y := findPos(v, pos)
+func (v *View) WriteRuneAtPos(pos int, ch rune, log func(...interface{})) {
+	y, x := findPos(v, pos)
 	if ch == '\n' {
 		v.breakLineReal(x, y)
 	} else {
@@ -47,8 +59,11 @@ func (v *View) WriteRuneAtPos(pos int, ch rune) {
 	}
 }
 
-func (v *View) DeleteRuneAtPos(pos int) {
-	x, y := findPos(v, pos)
+func (v *View) DeleteRuneAtPos(pos int, log func(...interface{})) {
+	pos -= 1
+	y, x := findPos(v, pos)
+	log("delete char at position ", pos, y, x)
+	log("which should be ", v.lines[y][x])
 	v.editDeleteAt(x, y, false)
 }
 

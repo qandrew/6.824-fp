@@ -214,6 +214,7 @@ func start_ui(cl *client_common.OTClient) {
 		case termbox.KeyArrowLeft, termbox.KeyCtrlB:
 		case termbox.KeyArrowRight, termbox.KeyCtrlF:
 		case termbox.KeyBackspace, termbox.KeyBackspace2:
+			cl.Println("captured backspace ", v.AbsPosition())
 			cl.Delete(v.AbsPosition())
 		case termbox.KeyTab:
 			cl.Insert('\t', v.AbsPosition())
@@ -223,6 +224,7 @@ func start_ui(cl *client_common.OTClient) {
 			cl.Insert('\n', v.AbsPosition())
 		default:
 			if ev.Ch != 0 {
+				cl.Println("captured char ", v.AbsPosition())
 				cl.Insert(ev.Ch, v.AbsPosition())
 			}
 		}
@@ -231,12 +233,15 @@ func start_ui(cl *client_common.OTClient) {
 		log.Panicln(err)
 	}
 
-	v, err := g.View("main")
 	cl.RegisterInsertCb(func(pos int, ch rune) {
-		v.WriteRuneAtPos(pos, ch)
+		v, _ := g.View("main")
+		v.WriteRuneAtPos(pos, ch, cl.Println)
+		g.Flush()
 	})
 	cl.RegisterDeleteCb(func(pos int) {
-		v.DeleteRuneAtPos(pos)
+		v, _ := g.View("main")
+		v.DeleteRuneAtPos(pos, cl.Println)
+		g.Flush()
 	})
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
