@@ -255,34 +255,41 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if cl.Debug {
 		cl.Println("received", args)
 	}
-	if args.OpType == "empty" || args.OpType == "noOp" {
+	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
-		// We need to xform everything in the buffer
-		temp := args
-		for i := 0; i < len(cl.outgoingQueue); i++ {
-			// I think this is right but m a y b e n o t
-			cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
+		if args.VersionS == cl.version {
+			cl.addCurrState(args) // no need to do OT, simply update and add logs
+			cl.version++ // increment version also
+			cl.insertCb(args.Position, args.Payload) // when this works
+		} else {
+			// We need to xform everything in the buffer
+			temp := args
+			for i := 0; i < len(cl.outgoingQueue); i++ {
+				// I think this is right but m a y b e n o t
+				cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
+			}
+
+			cl.addCurrState(temp)
+			cl.insertCb(temp.Position, temp.args) // not sure if it works
+			cl.version++ // not sure if this is correct
+			/*
+			Here's a shitty schematic of the above operations
+
+			 buf[0] /\
+			       /  \
+		      buf[1]  /\  / new buf[0]
+			     /  \/
+		    buf[2]  /\  / new buf[1]
+			   /  \/
+			   \  / new buf[2] and so on
+	      temp (newest) \/
+
+			We need to apply the last value of temp locally
+			*/
 		}
-
-		cl.addCurrState(temp)
-		cl.version++ // not sure if this is correct
-		/*
-					Here's a shitty schematic of the above operations
-
-					 buf[0] /\
-					       /  \
-				      buf[1]  /\  / new buf[0]
-					     /  \/
-				    buf[2]  /\  / new buf[1]
-					   /  \/
-					   \  / new buf[2] and so on
-			      temp (newest) \/
-
-					We need to apply the last value of temp locally
-		*/
-		if cl.Debug {
-			cl.Println("xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
+		if cl.Debug{
+			fmt.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
 	}
 }
