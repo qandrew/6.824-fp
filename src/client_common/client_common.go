@@ -261,7 +261,8 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		if args.VersionS == cl.version {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			cl.version++ // increment version also
-			cl.insertCb(args.Position, args.Payload) // when this works
+			r := []rune(args.Payload) // convert string to rune
+			cl.insertCb(args.Position, r[0]) // when this works
 		} else {
 			// We need to xform everything in the buffer
 			temp := args
@@ -271,7 +272,8 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			}
 
 			cl.addCurrState(temp)
-			cl.insertCb(temp.Position, temp.args) // not sure if it works
+			r := []rune(temp.Payload)
+			cl.insertCb(temp.Position, r[0]) // not sure if it works
 			cl.version++ // not sure if this is correct
 			/*
 			Here's a shitty schematic of the above operations
