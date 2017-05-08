@@ -50,7 +50,7 @@ func NewOTClient() *OTClient {
 		cl.Println("addr\t", text)
 	} else {
 		text = text[:len(text)-1] + ":42586"
-		cl.Println("addr]t", text)
+		cl.Println("addr\t", text)
 	}
 	time.Sleep(SLEEP * time.Millisecond)
 	rpc_client, err := rpc.Dial("tcp", text)
@@ -165,7 +165,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 	}
 	cl.logs = append(cl.logs, args) // add to logs
 	if cl.Debug {
-		cl.Println("addCurrState: now", cl.currState, "ver", cl.version, "logs", cl.logs)
+		cl.Println("addCurrState:\n=====\n"+cl.currState, "\n=====\nver", cl.version, "logs", cl.logs)
 	}
 }
 
@@ -216,7 +216,6 @@ func (cl *OTClient) RandOp() {
 	}
 	val := strconv.Itoa(r.Intn(9))
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.addVersion(), Uid: cl.uid, Payload: val}
-	cl.Println("calling", args)
 	cl.SendOp(&args)
 
 }
@@ -227,7 +226,7 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	var reply op.OpReply
 
 	if cl.Debug {
-		cl.Println("calling sendop", args)
+		//cl.Println("calling sendop", args)
 	}
 
 	cl.outgoingQueue = append(cl.outgoingQueue, *args)
@@ -253,16 +252,22 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	// once one log is received, xform everything in the buffer
 	// furthermore, xform the current state with the transformed log
 	if cl.Debug {
-		cl.Println("received", args)
+		//cl.Println("received", args)
 	}
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
 		if args.VersionS == cl.version {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
-			cl.version++ // increment version also
-			r := []rune(args.Payload) // convert string to rune
-			cl.insertCb(args.Position, r[0]) // when this works
+			cl.version++          // increment version also
+			if args.OpType == "ins" {
+				r := []rune(args.Payload) // convert string to rune
+				cl.Println("Simply insert ", r[0], " at position ", args.Position)
+				cl.insertCb(args.Position, r[0]) // when this works
+			} else {
+				cl.Println("Simply delete at position ", args.Position)
+				cl.deleteCb(args.Position)
+			}
 		} else {
 			// We need to xform everything in the buffer
 			temp := args
@@ -272,26 +277,32 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			}
 
 			cl.addCurrState(temp)
-			r := []rune(temp.Payload)
-			cl.insertCb(temp.Position, r[0]) // not sure if it works
+			if args.OpType == "ins" {
+				r := []rune(temp.Payload)
+				cl.Println("insert ", r[0], " at pos ", temp.Position, " after transform")
+				cl.insertCb(temp.Position, r[0]) // not sure if it works
+			} else {
+				cl.Println("delete at position ", args.Position)
+				cl.deleteCb(temp.Position)
+			}
 			cl.version++ // not sure if this is correct
 			/*
-			Here's a shitty schematic of the above operations
+						Here's a shitty schematic of the above operations
 
-			 buf[0] /\
-			       /  \
-		      buf[1]  /\  / new buf[0]
-			     /  \/
-		    buf[2]  /\  / new buf[1]
-			   /  \/
-			   \  / new buf[2] and so on
-	      temp (newest) \/
+						 buf[0] /\
+						       /  \
+					      buf[1]  /\  / new buf[0]
+						     /  \/
+					    buf[2]  /\  / new buf[1]
+						   /  \/
+						   \  / new buf[2] and so on
+				      temp (newest) \/
 
-			We need to apply the last value of temp locally
+						We need to apply the last value of temp locally
 			*/
 		}
-		if cl.Debug{
-			fmt.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
+		if cl.Debug {
+			//cl.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
 	}
 }
