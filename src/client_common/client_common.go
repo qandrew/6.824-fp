@@ -77,7 +77,8 @@ func NewOTClient() *OTClient {
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
-	go cl.Pull()
+	go cl.Pull() // receiving operations
+	go cl.SendShit() // sending operations
 
 	return cl
 }
@@ -205,17 +206,17 @@ func (cl *OTClient) addVersion() int {
 func (cl *OTClient) Insert(ch rune, pos int) {
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: 0,
 		Uid: cl.uid, Payload: string(ch)}
-	cl.SendOp(&args)
+	// cl.SendOp(&args)
 
-	// cl.chanSend <- args
+	cl.chanSend <- args
 }
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
 		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, Payload: ""}
-		cl.SendOp(&args)
+		// cl.SendOp(&args)
 
-		// cl.chanSend <- args
+		cl.chanSend <- args
 	}
 }
 
@@ -233,23 +234,36 @@ func (cl *OTClient) RandOp() {
 	cl.SendOp(&args)
 }
 
+func (cl *OTClient) SendShit() {
+	// infinite loop to send stuff
+	for {
+		args := <- cl.chanSend // receive operation to send
+		if cl.Debug { cl.Println("beginning send", args)}
+		if args.Version < cl.version{
+			// do pre-RPC call OT
+			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++{
+				args, _ = op.Xform(args,cl.getLogVersion(i))
+			}
+			args.Version = cl.version // update version
+		} 
+		cl.addCurrState(args) // add to current state and append logs
+		var upToDate bool
+		err := cl.rpc_client.Call("OTServer.ApplyOp", &args, &upToDate)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !upToDate {
+			cl.chanPull <- true // send pull request
+		}
+
+	}
+}
+
 func (cl *OTClient) SendOp(args *op.Op) {
+	// DEPRECATED!!!! Use SENDSHIT instead
 
-
-	// for {
-	// 	temp :<- cl.SendShit
-	// 	do pre applyOp OT 
-	// 	call applyOp
-	// 	if reply = true
-	// 	call broadcast
-	// }
-
-	if cl.Debug { cl.Println("calling sendop", args)}
 	// TODO: make SendOp be able to edit the version number
 	// TODO: when the buffer is implemented, SendOp should probably just add the op to the buffer.
-
-	// TODO: we need to do OT on args if we received ops in between
-	// the gui creating the args and sending it.	
 
 	cl.outgoingQueue = append(cl.outgoingQueue, *args)
 
@@ -291,7 +305,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
-		if args.VersionS == cl.version {
+		if args.VersionS == cl.version { 
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			if args.OpType == "ins" {
 				r := []rune(args.Payload) // convert string to rune
@@ -302,18 +316,24 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 				cl.deleteCb(args.Position)
 			}
 		} else {
-			// We need to xform everything in the buffer
 			temp := args
-			for i := 0; i < len(cl.outgoingQueue); i++ {
-				// I think this is right but m a y b e n o t
-				cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
+
+			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++{
+				// do operational transforms
+				temp, _ = op.Xform(temp,cl.getLogVersion(i))
 			}
+
+			// We need to xform everything in the buffer
+			// for i := 0; i < len(cl.outgoingQueue); i++ {
+			// 	// I think this is right but m a y b e n o t
+			// 	cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
+			// }
 
 			if cl.Debug{
 				cl.Println("receive xform to add", temp, "cl ver", cl.version)
 			}
 			temp.Version = cl.version // overwrite the version
-			temp.VersionS = cl.version // overwrite the version, just in case
+			// temp.VersionS = cl.version // overwrite the version, just in case
 			cl.addCurrState(temp)
 			if args.OpType == "ins" {
 				r := []rune(temp.Payload)
