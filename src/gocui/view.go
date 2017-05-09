@@ -21,6 +21,7 @@ type View struct {
 	ox, oy         int
 	cx, cy         int
 	lines          [][]cell
+	buffer         string
 	readOffset     int
 	readCache      string
 
@@ -106,6 +107,7 @@ func newView(name string, x0, y0, x1, y1 int, mode OutputMode) *View {
 		Editor:  DefaultEditor,
 		tainted: true,
 		ei:      newEscapeInterpreter(mode),
+		buffer:  "",
 	}
 	return v
 }
@@ -196,19 +198,8 @@ func (v *View) Origin() (x, y int) {
 }
 
 func (v *View) AbsPosition() int {
-	ox, oy := v.Origin()
 	cx, cy := v.Cursor()
-	x := ox + cx
-	y := oy + cy
-
-	pos := 0
-	for i, line := range v.lines {
-		if i >= y {
-			break
-		}
-		pos = pos + len(line) + 1
-	}
-	return pos + x
+	return findAbsPos(v, cx, cy)
 }
 
 // Write appends a byte slice into the view's internal buffer. Because
@@ -243,6 +234,8 @@ func (v *View) Write(p []byte) (n int, err error) {
 			}
 		}
 	}
+
+	v.buffer += string(bytes.Runes(p))
 	return len(p), nil
 }
 
