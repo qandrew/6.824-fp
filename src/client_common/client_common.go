@@ -37,6 +37,9 @@ type OTClient struct {
 
 	insertCb func(int, rune)
 	deleteCb func(int)
+
+	chanPull chan bool
+	chanSend chan op.Op
 }
 
 func NewOTClient() *OTClient {
@@ -68,42 +71,48 @@ func NewOTClient() *OTClient {
 	cl.insertCb = func(x int, ch rune) { /* noop */ }
 	cl.deleteCb = func(x int) { /* noop */ }
 
+	cl.chanPull = make(chan bool, 3) // not sure how wide
+	cl.chanSend = make(chan op.Op, 10) // not sure how wide
+
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
-	go func() {
-		var empty op.Op
-		empty.Uid = cl.uid
-		empty.OpType = "empty"
-		for {
-			time.Sleep(SLEEP * time.Millisecond) // some time/duration bug
-			empty.Version = cl.version // update version
-			// empty.VersionS = cl.versionS // update version
-			// cl.insertCb(0,'a') // testing, not correct
-			var reply op.OpReply
-			reply.Logs = make([]op.Op, 1)
-			reply.Logs[0].Payload = "u"
-			reply.Num = 3
-			// if cl.Debug {
-			// 	cl.Println("client to call", empty, reply)
-			// }
-			err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if reply.Logs[0].OpType != "empty" {
-				if cl.Debug {
-					cl.Println("client behind; received", reply)
-				}
-				//respond to all of the logs
-				for i := 0; i < len(reply.Logs); i++ {
-					cl.receiveSingleLog(reply.Logs[i])
-				}
-			} 
-		}
-	}()
+	go cl.Pull()
 
 	return cl
+}
+
+func (cl *OTClient) Pull() {
+	// endless goroutine
+	var empty op.Op
+	empty.Uid = cl.uid
+	empty.OpType = "empty"
+	for {
+		select { // choose how long to wait
+			case <- cl.chanPull:
+			case <- time.After(SLEEP * time.Millisecond):
+		}
+
+		empty.Version = cl.version // update version
+		// empty.VersionS = cl.versionS // update version
+		// cl.insertCb(0,'a') // testing, not correct
+		var reply op.OpReply
+		reply.Logs = make([]op.Op, 1)
+		if cl.Debug {cl.Println("client to call", empty, reply)}
+		err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if reply.Logs[0].OpType != "empty" {
+			if cl.Debug {
+				cl.Println("client behind; received", reply)
+			}
+			//respond to all of the logs
+			for i := 0; i < len(reply.Logs); i++ {
+				cl.receiveSingleLog(reply.Logs[i])
+			}
+		} 
+	}
 }
 
 func (cl *OTClient) Println(args ...interface{}) {
@@ -197,12 +206,16 @@ func (cl *OTClient) Insert(ch rune, pos int) {
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: 0,
 		Uid: cl.uid, Payload: string(ch)}
 	cl.SendOp(&args)
+
+	// cl.chanSend <- args
 }
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
 		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, Payload: ""}
 		cl.SendOp(&args)
+
+		// cl.chanSend <- args
 	}
 }
 
@@ -220,7 +233,17 @@ func (cl *OTClient) RandOp() {
 	cl.SendOp(&args)
 }
 
-func (cl *OTClient) SendOp(args *op.Op) op.Op {
+func (cl *OTClient) SendOp(args *op.Op) {
+
+
+	// for {
+	// 	temp :<- cl.SendShit
+	// 	do pre applyOp OT 
+	// 	call applyOp
+	// 	if reply = true
+	// 	call broadcast
+	// }
+
 	if cl.Debug { cl.Println("calling sendop", args)}
 	// TODO: make SendOp be able to edit the version number
 	// TODO: when the buffer is implemented, SendOp should probably just add the op to the buffer.
@@ -239,20 +262,24 @@ func (cl *OTClient) SendOp(args *op.Op) op.Op {
 	// }
 
 	cl.addCurrState(*args) // add to current state and append logs
-	var reply op.OpReply
-	reply.Logs = make([]op.Op, 1) // make at least one, let server append
-	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &reply)
+	var upToDate bool
+	// reply.Logs = make([]op.Op, 1) // make at least one, let server append
+	err := cl.rpc_client.Call("OTServer.ApplyOp", args, &upToDate)
 	if err != nil {
 		log.Fatal(err)
 	}
+	if !upToDate {
+		cl.chanPull <- true // send pull request
+	}
 	// TODO: What we probably want to do is call receiveSingleLog on each of the elements in the
 	// log individually, and only then do we remove an op from the buffer
-	for i := 0; i < len(reply.Logs); i++ {
-		cl.receiveSingleLog(reply.Logs[i])
-	}
+
+	// for i := 0; i < len(reply.Logs); i++ {
+	// 	cl.receiveSingleLog(reply.Logs[i])
+	// }
 	// pop from the queue
 	cl.outgoingQueue = cl.outgoingQueue[1:]
-	return reply.Logs[0]
+	// return reply.Logs[0]
 }
 
 func (cl *OTClient) receiveSingleLog(args op.Op) {

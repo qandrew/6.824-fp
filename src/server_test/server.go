@@ -49,12 +49,12 @@ func (sv *OTServer) Init(clientID int64, resp *bool) error {
 	return nil
 }
 
-func (sv *OTServer) ApplyOp(args *op.Op, resp *op.OpReply) error {
+func (sv *OTServer) ApplyOp(args *op.Op, resp *bool) error {
 	// operation called by the client
 	// fmt.Println(args)
 	var err error
 	if args.OpType == "empty" {
-		err = sv.Broadcast(args,resp)
+		// err = sv.Broadcast(args,resp)
 	} else {
 		err = sv.ApplyTransformation(args, resp) // do the actual OT here
 	}
@@ -102,12 +102,12 @@ func (sv *OTServer) useOperationAndUpdate(args op.Op){
 	sv.logs = append(sv.logs, args)
 }
 
-func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
+func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 	fmt.Println("incoming op ", args)
 	if args.OpType != "ins" && args.OpType != "del" {
 		log.Fatal(errors.New("xform: wrong operation input"))
 	}
-	resp.Logs = make([]op.Op,1) // make a new entry in resp logs
+	// resp.Logs = make([]op.Op,1) // make a new entry in resp logs
 
 	if args.Version == sv.version {
 		// in this case, we don't need to do any transforms
@@ -115,7 +115,8 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 		sv.useOperationAndUpdate(*args)
 		sv.clients[args.Uid] =  args.Version + 1
 
-		resp.Logs[0].OpType = "good"
+		*resp = false
+		// resp.Logs[0].OpType = "good"
 		// resp.Logs[0].VersionS = sv.version
 	} else if args.Version < sv.version {
 		// diverging situation
@@ -123,13 +124,14 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *op.OpReply) error {
 		// we want to apply args' such that cl will end up at (1,1)
 		tempArg := *args
 		transformIndex := args.Version
+		*resp = true
 
 		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version)
 		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
 
 			t1 := sv.getLogByVersion(transformIndex)
 			if t1.Uid != tempArg.Uid { // don't do OT on operations from same client
-				resp.Logs = append(resp.Logs,t1) // add it to the response
+				// resp.Logs = append(resp.Logs,t1) // add it to the response
 				tempArg, _ = op.Xform(tempArg, t1)
 			}
 		}
