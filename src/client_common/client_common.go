@@ -90,18 +90,15 @@ func (cl *OTClient) Pull() {
 	empty.OpType = "empty"
 	for {
 		select { // choose how long to wait
-		case <-cl.chanPull:
-		case <-time.After(SLEEP * time.Millisecond):
+			case <-cl.chanPull:
+			case <-time.After(SLEEP * time.Millisecond):
 		}
 
 		empty.Version = cl.version // update version
 		// empty.VersionS = cl.versionS // update version
-		// cl.insertCb(0,'a') // testing, not correct
 		var reply op.OpReply
 		reply.Logs = make([]op.Op, 1)
-		if cl.Debug {
-			cl.Println("client to call", empty, reply)
-		}
+		// if cl.Debug {cl.Println("client to call", empty, reply)}
 		err := cl.rpc_client.Call("OTServer.Broadcast", empty, &reply)
 		if err != nil {
 			log.Fatal(err)
@@ -112,7 +109,10 @@ func (cl *OTClient) Pull() {
 			}
 			//respond to all of the logs
 			for i := 0; i < len(reply.Logs); i++ {
-				cl.receiveSingleLog(reply.Logs[i])
+				if reply.Logs[i].Uid != cl.uid{
+					// don't insert something that client already has
+					cl.receiveSingleLog(reply.Logs[i])
+				}
 			}
 		}
 	}
@@ -317,7 +317,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			if args.OpType == "ins" {
 				r := []rune(args.Payload) // convert string to rune
-				cl.Println("Simply insert ", r[0], " at position ", args.Position)
+				cl.Println("Simply insert ", args.Payload, " at position ", args.Position)
 				cl.insertCb(args.Position, r[0]) // when this works
 			} else {
 				cl.Println("Simply delete at position ", args.Position)
@@ -325,10 +325,13 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			}
 		} else {
 			temp := args
-
+			t1 := args // temporary setting
 			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
 				// do operational transforms
-				temp, _ = op.Xform(temp, cl.getLogVersion(i))
+				t1 = cl.getLogVersion(i)
+				if temp.Uid != t1.Uid{ // only do OT if on a different version
+					temp, _ = op.Xform(temp, t1) // get log version could be optimized
+				}
 			}
 
 			// We need to xform everything in the buffer
@@ -345,7 +348,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			cl.addCurrState(temp)
 			if args.OpType == "ins" {
 				r := []rune(temp.Payload)
-				cl.Println("insert ", r[0], " at pos ", temp.Position, " after transform")
+				cl.Println("insert ", temp.Payload, " at pos ", temp.Position, " after transform")
 				cl.insertCb(temp.Position, r[0]) // not sure if it works
 			} else {
 				cl.Println("delete at position ", args.Position)

@@ -115,16 +115,14 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 		sv.useOperationAndUpdate(*args)
 		sv.clients[args.Uid] =  args.Version + 1
 
-		*resp = false
-		// resp.Logs[0].OpType = "good"
-		// resp.Logs[0].VersionS = sv.version
+		*resp = false // we are up to date
 	} else if args.Version < sv.version {
 		// diverging situation
 		// ex if cl at (1,0) and args at (0,1)
 		// we want to apply args' such that cl will end up at (1,1)
 		tempArg := *args
 		transformIndex := args.Version
-		*resp = true
+		*resp = true // we are not up to date
 
 		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version)
 		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
@@ -172,7 +170,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 	fmt.Println("ApplyTransformation now: ", strings.Replace(sv.currState, "\n", "\\n", -1))
 	// fmt.Println("Clients version", sv.clients, sv.version)
 	fmt.Println("logs", sv.logs)
-	fmt.Println("replying", resp)
+	fmt.Println("replying", *resp)
 
 	return nil
 }
