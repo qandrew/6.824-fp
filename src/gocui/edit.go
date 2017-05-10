@@ -114,6 +114,10 @@ func (v *View) EditDelete(back bool) {
 
 func (v *View) EditDeletePos(pos int, back bool) {
 	v.tainted = true
+	if back && pos == 0{
+		// don't delete at index
+		return
+	}
 	if back && pos > 0 {
 		pos--
 	}
