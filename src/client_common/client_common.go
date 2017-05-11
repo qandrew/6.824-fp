@@ -125,6 +125,7 @@ func (cl *OTClient) Pull() {
 				cl.receiveSingleLog(reply.Logs[i])
 				// }
 			}
+			if cl.Debug { cl.Println("done receive, ver now", cl.version) }
 		}
 	}
 }
@@ -303,6 +304,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	} else if args.OpType == "ins" || args.OpType == "del" {
 		if args.VersionS == cl.version {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
+			cl.version++
 			if args.OpType == "ins" {
 				r := []rune(args.Payload) // convert string to rune
 				cl.Println("Simply insert ", args.Payload, " at position ", args.Position)

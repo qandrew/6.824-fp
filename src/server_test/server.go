@@ -81,7 +81,7 @@ func (sv *OTServer) Broadcast(args *op.Op, resp *op.OpReply) error {
 		// args.Version guaranteed to be >= 1
 		resp.Logs = make([]op.Op,len(sv.logs)-args.Version)
 		resp.Logs = sv.logs[args.Version-1:] // return all missing logs
-		fmt.Println("broadcast to", args, resp)
+		fmt.Println("broadcast: sv.ver", sv.version,"args", args, "resp",resp)
 
 		sv.clients[args.Uid] = sv.version // assume that client will be able to resolve all conflicts
 		// tho technically we might need an ack from client
@@ -169,7 +169,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 
 	fmt.Println("ApplyTransformation now: ", strings.Replace(sv.currState, "\n", "\\n", -1))
 	// fmt.Println("Clients version", sv.clients, sv.version)
-	fmt.Println("logs", sv.logs)
+	fmt.Println("ver", sv.version, "logs", sv.logs)
 	fmt.Println("replying", *resp)
 
 	return nil
