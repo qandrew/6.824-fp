@@ -232,7 +232,8 @@ func (cl *OTClient) Insert(ch rune, pos int) {
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, Payload: ""}
+		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, 
+			Uid: cl.uid, Payload: ""}
 		cl.addCurrState(args)
 		cl.QueuePush(args)
 		cl.chanSend <- true

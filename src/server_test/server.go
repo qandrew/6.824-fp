@@ -115,14 +115,14 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 		sv.useOperationAndUpdate(*args)
 		sv.clients[args.Uid] =  args.Version + 1
 
-		*resp = false // we are up to date
+		*resp = true // we are up to date
 	} else if args.Version < sv.version {
 		// diverging situation
 		// ex if cl at (1,0) and args at (0,1)
 		// we want to apply args' such that cl will end up at (1,1)
 		tempArg := *args
 		transformIndex := args.Version
-		*resp = true // we are not up to date
+		*resp = false // we are not up to date
 
 		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version)
 		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
