@@ -28,7 +28,14 @@ type OTServer struct {
 
 func (sv *OTServer) getLogByVersion (i int) op.Op{
 	// return the log with version index i
-	if sv.logs[i-1].Version == i{
+	if sv.logs[i-1].VersionS == i{
+		return sv.logs[i-1]
+	} else {
+		for _, log := range sv.logs {
+			if log.VersionS == i {
+				return log
+			}
+		}
 		return sv.logs[i-1]
 	}
 	fmt.Println("fuck")
@@ -36,7 +43,7 @@ func (sv *OTServer) getLogByVersion (i int) op.Op{
 }
 
 func (sv *OTServer) getLastLogVersion() int {
-	return sv.logs[len(sv.logs)-1].Version
+	return sv.logs[len(sv.logs)-1].VersionS // server side invariant log
 }
 
 func (sv *OTServer) Init(clientID int64, resp *bool) error {
@@ -126,7 +133,7 @@ func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
 		transformIndex := args.Version
 		*resp = false // we are not up to date
 
-		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version)
+		fmt.Println("doing OT from", transformIndex, "to sv.ver", sv.version, "sv.getLast", sv.getLastLogVersion())
 		for ; transformIndex <= sv.getLastLogVersion(); transformIndex++ {
 
 			t1 := sv.getLogByVersion(transformIndex)
