@@ -103,7 +103,7 @@ func (sv *OTServer) useOperationAndUpdate(args op.Op){
 }
 
 func (sv *OTServer) ApplyTransformation(args *op.Op, resp *bool) error {
-	fmt.Println("incoming op ", args)
+	fmt.Println("\nincoming op ", args)
 	if args.OpType != "ins" && args.OpType != "del" {
 		log.Fatal(errors.New("xform: wrong operation input"))
 	}

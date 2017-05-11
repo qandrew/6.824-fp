@@ -223,7 +223,7 @@ func (cl *OTClient) addVersion() int {
 }
 
 func (cl *OTClient) Insert(ch rune, pos int) {
-	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: 0,
+	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: cl.version,
 		Uid: cl.uid, Payload: string(ch)}
 	cl.addCurrState(args)
 	cl.QueuePush(args)
@@ -232,7 +232,7 @@ func (cl *OTClient) Insert(ch rune, pos int) {
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: 0, 
+		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: cl.version, 
 			Uid: cl.uid, Payload: ""}
 		cl.addCurrState(args)
 		cl.QueuePush(args)
@@ -241,6 +241,7 @@ func (cl *OTClient) Delete(pos int) {
 }
 
 func (cl *OTClient) RandOp() {
+	// deprecated
 	// Needs to be revamped or something now that SendOp is gone
 	// let the client do a random operation
 	var pos int
@@ -303,7 +304,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
-		if args.VersionS == cl.version {
+		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			cl.version++
 			if args.OpType == "ins" {
@@ -340,7 +341,6 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 				cl.Println("receive xform to add", temp, "cl ver", cl.version)
 			}
 			temp.Version = cl.version // overwrite the version
-			// temp.VersionS = cl.version // overwrite the version, just in case
 			cl.addCurrState(temp)
 			cl.version++
 			if args.OpType == "ins" {
