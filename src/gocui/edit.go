@@ -56,11 +56,19 @@ func findAbsPos(v *View, x, y int) int {
 }
 
 func (v *View) WriteRuneAtPos(pos int, ch rune, log func(...interface{})) {
+	cpos := findAbsPos(v, v.cx, v.cy)
 	v.EditWritePos(pos, ch)
+	if pos <= cpos {
+		v.cx, v.cy = findPos(v, cpos+1)
+	}
 }
 
 func (v *View) DeleteRuneAtPos(pos int, log func(...interface{})) {
+	cpos := findAbsPos(v, v.cx, v.cy)
 	v.EditDeletePos(pos, true)
+	if pos <= cpos {
+		v.cx, v.cy = findPos(v, cpos-1)
+	}
 }
 
 func (v *View) resetToBuf() {
@@ -114,7 +122,7 @@ func (v *View) EditDelete(back bool) {
 
 func (v *View) EditDeletePos(pos int, back bool) {
 	v.tainted = true
-	if back && pos == 0{
+	if back && pos == 0 {
 		// don't delete at index
 		return
 	}
