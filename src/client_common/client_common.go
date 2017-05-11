@@ -304,7 +304,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
-		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 {
+		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			cl.version++
 			if args.OpType == "ins" {
@@ -340,7 +340,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			if cl.Debug {
 				cl.Println("receive xform to add", temp, "cl ver", cl.version)
 			}
-			temp.Version = cl.version // overwrite the version
+			temp.Version = cl.logs[len(cl.logs)-1].Version // overwrite the version
 			cl.addCurrState(temp)
 			cl.version++
 			if args.OpType == "ins" {

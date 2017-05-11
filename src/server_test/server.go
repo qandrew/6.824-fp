@@ -53,6 +53,8 @@ func (sv *OTServer) ApplyOp(args *op.Op, resp *bool) error {
 	// operation called by the client
 	// fmt.Println(args)
 	var err error
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
 	if args.OpType == "empty" {
 		// err = sv.Broadcast(args,resp)
 	} else {
