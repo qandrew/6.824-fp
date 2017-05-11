@@ -190,7 +190,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 	}
 	args.Version = cl.version       // safety check?
 	cl.logs = append(cl.logs, args) // add to logs
-	cl.version++                    // increment version only when we have appended it to logs
+	// cl.version++                    // increment version only when we have appended it to logs
 	if cl.Debug {
 		cl.Println("addCurrState:\n=====\n"+cl.currState, "\n=====\nver", cl.version, "logs", cl.logs)
 	}
@@ -259,7 +259,8 @@ func (cl *OTClient) SendShit() {
 		select{
 			case <-cl.chanSend: // receive operation to send
 		}
-		args := cl.QueueFirstItem()
+		// args := cl.QueueFirstItem()
+		args := cl.QueuePop()
 		if cl.Debug {
 			cl.Println("beginning send", args)
 		}
