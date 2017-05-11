@@ -34,12 +34,14 @@ type OTClient struct {
 
 	outgoingQueue []op.Op // A queue of operations that have been locally
 	// applied but messages have not been sent
+	waitingForPop bool // Used 
 
 	insertCb func(int, rune)
 	deleteCb func(int)
 
 	chanPull chan bool
 	chanSend chan bool
+	chanPop chan bool
 }
 
 func NewOTClient() *OTClient {
@@ -66,6 +68,7 @@ func NewOTClient() *OTClient {
 	// cl.versionS = 1 // let the starting state be (1,1)
 	cl.version = 1 // let the starting state be (1,1)
 	cl.Debug = false
+	cl.waitingForPop = false
 	cl.outgoingQueue = make([]op.Op, 0)
 
 	cl.insertCb = func(x int, ch rune) { /* noop */ }
@@ -73,6 +76,7 @@ func NewOTClient() *OTClient {
 
 	cl.chanPull = make(chan bool, 3)   // not sure how wide
 	cl.chanSend = make(chan bool, 10) // not sure how wide
+	cl.chanPop = make(chan bool, 1)
 
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
@@ -109,7 +113,6 @@ func (cl *OTClient) Pull() {
 		}
 
 		empty.Version = cl.version // update version
-		// empty.VersionS = cl.versionS // update version
 		var reply op.OpReply
 		reply.Logs = make([]op.Op, 1)
 		// if cl.Debug {cl.Println("client to call", empty, reply)}
@@ -121,9 +124,10 @@ func (cl *OTClient) Pull() {
 			if cl.Debug { cl.Println("client behind; received", reply) }
 			//respond to all of the logs
 			for i := 0; i < len(reply.Logs); i++ {
-				// if reply.Logs[i].Uid != cl.uid{
 				cl.receiveSingleLog(reply.Logs[i])
-				// }
+			}
+			if cl.waitingForPop{
+				cl.chanPop <- true // request to pop buffer if there isn't anything in buffer
 			}
 			if cl.Debug { cl.Println("done receive, ver now", cl.version) }
 		}
@@ -189,7 +193,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 			cl.currState = cl.currState[:args.Position-1] + cl.currState[args.Position:]
 		}
 	}
-	args.Version = cl.version       // safety check?
+	// args.Version = cl.version       // safety check?
 	cl.logs = append(cl.logs, args) // add to logs
 	// cl.version++                    // increment version only when we have appended it to logs
 	if cl.Debug {
@@ -262,8 +266,8 @@ func (cl *OTClient) SendShit() {
 		select{
 			case <-cl.chanSend: // receive operation to send
 		}
-		// args := cl.QueueFirstItem()
-		args := cl.QueuePop()
+		args := cl.QueueFirstItem()
+		// args := cl.QueuePop()
 		if cl.Debug {
 			cl.Println("beginning send", args)
 		}
@@ -284,8 +288,15 @@ func (cl *OTClient) SendShit() {
 		}
 		if !upToDate {
 			cl.chanPull <- true // send pull request
+			cl.waitingForPop = true
+			select {
+				case <- cl.chanPop:
+					cl.QueuePop()
+					cl.waitingForPop = false
+			}
 		} else {
 			cl.version++ // increment version since we are up to date with the server
+			cl.QueuePop() // pop the queue
 		}
 
 	}
@@ -304,7 +315,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
-		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version {
+		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version+1 {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			cl.version++
 			if args.OpType == "ins" {
@@ -340,7 +351,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			if cl.Debug {
 				cl.Println("receive xform to add", temp, "cl ver", cl.version)
 			}
-			temp.Version = cl.logs[len(cl.logs)-1].Version // overwrite the version
+			temp.Version = cl.logs[len(cl.logs)-1].Version+1 // overwrite the version
 			cl.addCurrState(temp)
 			cl.version++
 			if args.OpType == "ins" {
