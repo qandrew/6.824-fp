@@ -34,7 +34,7 @@ type OTClient struct {
 
 	outgoingQueue []op.Op // A queue of operations that have been locally
 	// applied but messages have not been sent
-	waitingForPop bool // Used 
+	waitingForPop bool // Used to wait for messages in the buffer to pop
 
 	insertCb func(int, rune)
 	deleteCb func(int)
@@ -236,7 +236,7 @@ func (cl *OTClient) Insert(ch rune, pos int) {
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: cl.version, 
+		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: cl.version,
 			Uid: cl.uid, Payload: ""}
 		cl.addCurrState(args)
 		cl.QueuePush(args)
@@ -315,6 +315,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" {
+		/*
 		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version+1 {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs
 			cl.version++
@@ -326,57 +327,58 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 				cl.Println("Simply delete at position ", args.Position)
 				cl.deleteCb(args.Position)
 			}
-		} else {
-			temp := args
-			// t1 := args // temporary setting
-			/*
-			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
-				// do operational transforms
-				t1 = cl.getLogVersion(i)
-				if temp.Uid != t1.Uid{ // only do OT if on a different version
-					temp, _ = op.Xform(temp, t1) // get log version could be optimized
-				}
+		} else { */
+		temp := args
+		// t1 := args // temporary setting
+		/*
+		for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
+			// do operational transforms
+			t1 = cl.getLogVersion(i)
+			if temp.Uid != t1.Uid{ // only do OT if on a different version
+				temp, _ = op.Xform(temp, t1) // get log version could be optimized
 			}
-			*/
-
-			// We need to xform everything in the buffer
-			for i := 0; i < len(cl.outgoingQueue); i++ {
-				// I think this is right but m a y b e n o t
-				if temp.Uid != cl.outgoingQueue[i].Uid {
-					// This check might not be necessary
-					cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
-				}
-			}
-
-			if cl.Debug {
-				cl.Println("receive xform to add", temp, "cl ver", cl.version)
-			}
-			temp.Version = cl.logs[len(cl.logs)-1].Version+1 // overwrite the version
-			cl.addCurrState(temp)
-			cl.version++
-			if args.OpType == "ins" {
-				r := []rune(temp.Payload)
-				cl.Println("insert ", temp.Payload, " at pos ", temp.Position, " after transform")
-				cl.insertCb(temp.Position, r[0]) // not sure if it works
-			} else {
-				cl.Println("delete at position ", args.Position)
-				cl.deleteCb(temp.Position)
-			}
-			/*
-						Here's a shitty schematic of the above operations
-
-						 buf[0] /\
-						       /  \
-					      buf[1]  /\  / new buf[0]
-						     /  \/
-					    buf[2]  /\  / new buf[1]
-						   /  \/
-						   \  / new buf[2] and so on
-				      temp (newest) \/
-
-						We need to apply the last value of temp locally
-			*/
 		}
+		*/
+
+		// We need to xform everything in the buffer
+		for i := 0; i < len(cl.outgoingQueue); i++ {
+			// I think this is right but m a y b e n o t
+			if temp.Uid != cl.outgoingQueue[i].Uid {
+				// This check might not be necessary
+				cl.outgoingQueue[i], temp = op.Xform(cl.outgoingQueue[i], temp)
+			}
+		}
+
+		if cl.Debug {
+			cl.Println("receive xform to add", temp, "cl ver", cl.version)
+		}
+		if len(cl.logs) > 0 {
+			temp.Version = cl.logs[len(cl.logs)-1].Version+1 // overwrite the version
+		}
+		cl.addCurrState(temp)
+		cl.version++
+		if args.OpType == "ins" {
+			r := []rune(temp.Payload)
+			cl.Println("insert ", temp.Payload, " at pos ", temp.Position, " after transform")
+			cl.insertCb(temp.Position, r[0]) // not sure if it works
+		} else {
+			cl.Println("delete at position ", args.Position)
+			cl.deleteCb(temp.Position)
+		}
+		/*
+					Here's a shitty schematic of the above operations
+
+					 buf[0] /\
+					       /  \
+				      buf[1]  /\  / new buf[0]
+					     /  \/
+				    buf[2]  /\  / new buf[1]
+					   /  \/
+					   \  / new buf[2] and so on
+			      temp (newest) \/
+
+					We need to apply the last value of temp locally
+		*/
 		if cl.Debug {
 			//cl.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
