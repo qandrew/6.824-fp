@@ -101,6 +101,14 @@ func (cl *OTClient) QueueFirstItem() op.Op {
 	return cl.outgoingQueue[0]
 }
 
+func (cl *OTClient) getNextLogVer() int {
+	if len(cl.logs) == 0{
+		return cl.version 
+	} else {
+		return cl.logs[len(cl.logs)-1].Version+1
+	}
+}
+
 func (cl *OTClient) Pull() {
 	// endless goroutine
 	var empty op.Op
@@ -218,16 +226,8 @@ func (cl *OTClient) GetSnapshot() string {
 	return snap.Value
 }
 
-func (cl *OTClient) addVersion() int {
-	// DEPRECATED
-	// when applying a new log, update the version
-	v := cl.version
-	cl.version += 1
-	return v
-}
-
 func (cl *OTClient) Insert(ch rune, pos int) {
-	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, VersionS: cl.version,
+	args := op.Op{OpType: "ins", Position: pos, Version: cl.getNextLogVer(), VersionS: cl.version,
 		Uid: cl.uid, Payload: string(ch)}
 	cl.addCurrState(args)
 	cl.QueuePush(args)
@@ -236,7 +236,7 @@ func (cl *OTClient) Insert(ch rune, pos int) {
 
 func (cl *OTClient) Delete(pos int) {
 	if pos != 0 { // can't delete first
-		args := op.Op{OpType: "del", Position: pos, Version: cl.version, VersionS: cl.version,
+		args := op.Op{OpType: "del", Position: pos, Version: cl.getNextLogVer(), VersionS: cl.version,
 			Uid: cl.uid, Payload: ""}
 		cl.addCurrState(args)
 		cl.QueuePush(args)
@@ -267,7 +267,7 @@ func (cl *OTClient) SendShit() {
 			case <-cl.chanSend: // receive operation to send
 		}
 		args := cl.QueueFirstItem()
-		// args.Version = cl.version // update version number
+		args.Version = cl.version // update version number before we send
 		// args := cl.QueuePop()
 		if cl.Debug {
 			cl.Println("beginning send", args)
