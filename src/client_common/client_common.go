@@ -35,6 +35,7 @@ type OTClient struct {
 	outgoingQueue []op.Op // A queue of operations that have been locally
 	// applied but messages have not been sent
 	waitingForPop bool // Used to wait for messages in the buffer to pop
+	startBufferIndex int
 
 	insertCb func(int, rune)
 	deleteCb func(int)
@@ -131,9 +132,11 @@ func (cl *OTClient) Pull() {
 		if reply.Logs[0].OpType != "empty" {
 			if cl.Debug { cl.Println("client behind; received", reply) }
 			//respond to all of the logs
+			cl.startBufferIndex = 0 // reset startBufferIndex
 			for i := 0; i < len(reply.Logs); i++ {
 				cl.receiveSingleLog(reply.Logs[i])
 			}
+			cl.startBufferIndex = 0
 			if cl.waitingForPop{
 				cl.chanPop <- true // request to pop buffer if there isn't anything in buffer
 			}
@@ -312,6 +315,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 	// if cl.Debug {//cl.Println("received", args)}
 	if args.Uid == cl.uid {
 		// don't insert something that the client already has
+		cl.startBufferIndex = 1
 		cl.version++
 		return
 	}
@@ -345,7 +349,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		*/
 
 		// We need to xform everything in the buffer
-		for i := 0; i < len(cl.outgoingQueue); i++ {
+		for i := cl.startBufferIndex; i < len(cl.outgoingQueue); i++ {
 			// I think this is right but m a y b e n o t
 			if temp.Uid != cl.outgoingQueue[i].Uid {
 				// This check might not be necessary
@@ -354,7 +358,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		}
 
 		if cl.Debug {
-			cl.Println("receive xform to add", temp, "cl ver", cl.version)
+			cl.Println("receive xform to add", temp, "cl ver", cl.version, "buffer", cl.outgoingQueue)
 		}
 		if len(cl.logs) > 0 {
 			temp.Version = cl.logs[len(cl.logs)-1].Version+1 // overwrite the version
