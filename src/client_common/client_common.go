@@ -184,7 +184,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 		} else {
 			cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
 		}
-	} else { // "del"
+	} else if args.OpType == "del" { 
 		if args.Position == len(cl.currState) && len(cl.currState) != 0 {
 			cl.currState = cl.currState[:args.Position-1]
 		} else if args.Position == 0 {
@@ -267,6 +267,7 @@ func (cl *OTClient) SendShit() {
 			case <-cl.chanSend: // receive operation to send
 		}
 		args := cl.QueueFirstItem()
+		// args.Version = cl.version // update version number
 		// args := cl.QueuePop()
 		if cl.Debug {
 			cl.Println("beginning send", args)
@@ -285,6 +286,9 @@ func (cl *OTClient) SendShit() {
 		err := cl.rpc_client.Call("OTServer.ApplyOp", &args, &upToDate)
 		if err != nil {
 			log.Fatal(err)
+		}
+		if cl.Debug {
+			cl.Println("after send", args, upToDate)
 		}
 		if !upToDate {
 			cl.chanPull <- true // send pull request
@@ -312,9 +316,9 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		return
 	}
 
-	if args.OpType == "empty" || args.OpType == "noOp" || args.OpType == "good" {
+	if args.OpType == "empty" || args.OpType == "good" {
 		// don't do anything
-	} else if args.OpType == "ins" || args.OpType == "del" {
+	} else if args.OpType == "ins" || args.OpType == "del" || args.OpType == "noOp" {
 		/*
 		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version+1 {
 			cl.addCurrState(args) // no need to do OT, simply update and add logs

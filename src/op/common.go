@@ -36,7 +36,10 @@ func ApplyOperation(args Op, currState string) string {
 		} else {
 			currState = currState[:args.Position] + args.Payload + currState[args.Position:]
 		}
-	} else {
+	} else if args.OpType == "del" {
+    // if args.Position == 0{
+    //   return // don't apply if we are at 0 
+    // }
 		if args.Position == len(currState) && len(currState) != 0 {
 			currState = currState[:args.Position-1]
 		} else {
