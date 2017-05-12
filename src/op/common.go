@@ -70,10 +70,12 @@ func Xform(opC Op, opS Op) (Op, Op) {
       newOpC.Position += len(opS.Payload)
     } else if posS > posC {
       newOpS.Position += len(opC.Payload)
-    } else { // They are equal, tiebreak with server comes first or something
-	     // We may need an additional flag in the Op struct that's something
-	     // like isFromServer
-	     // :thinking:
+    } else { // Tiebreaking rules: the one with the larger Uid comes later (ie gets its position modified)
+      if newOpC.Uid > newOpC.Uid {
+        newOpC.Position += len(opS.Payload)
+      } else {
+        newOpS.Position += len(opC.Payload)
+      }
     }
   }
 
