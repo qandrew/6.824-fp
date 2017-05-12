@@ -365,12 +365,12 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		}
 		cl.addCurrState(temp)
 		cl.version++
-		if args.OpType == "ins" {
+		if temp.OpType == "ins" {
 			r := []rune(temp.Payload)
 			cl.Println("insert ", temp.Payload, " at pos ", temp.Position, " after transform")
 			cl.insertCb(temp.Position, r[0]) // not sure if it works
-		} else {
-			cl.Println("delete at position ", args.Position)
+		} else if temp.OpType == "del" {
+			cl.Println("delete at position ", temp.Position)
 			cl.deleteCb(temp.Position)
 		}
 		/*
