@@ -74,7 +74,7 @@ func Xform(opC Op, opS Op) (Op, Op) {
     } else if posS > posC {
       newOpS.Position += len(opC.Payload)
     } else { // Tiebreaking rules: the one with the larger Uid comes later (ie gets its position modified)
-      if newOpC.Uid > newOpC.Uid {
+      if newOpC.Uid > newOpS.Uid {
         newOpC.Position += len(opS.Payload)
       } else {
         newOpS.Position += len(opC.Payload)
