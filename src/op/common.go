@@ -1,7 +1,7 @@
 package op
 
 import (
-// "fmt"
+	"strings"
 )
 
 type Op struct {
@@ -120,23 +120,36 @@ func Xform(opC Op, opS Op) (Op, Op) {
 	}
 
 	if opTypeC == "move" && opTypeS == "move" {
-		newOpC.Path = opS.Payload
-		newOpS.Path = opC.Payload
+		newOpC.Path = replacePrefix(opC.Path, opS.Path, opS.Payload)
+		newOpS.Path = replacePrefix(opS.Path, opC.Path, opC.Payload)
 
 		return newOpC, newOpS
 	}
 
 	if opTypeC == "move" {
-		newOpS.Path = opC.Payload
+		newOpS.Path = replacePrefix(opS.Path, opC.Path, opC.Payload)
 
 		return newOpC, newOpS
 	}
 
 	if opTypeS == "move" {
-		newOpC.Path = opS.Payload
+		newOpC.Path = replacePrefix(opC.Path, opS.Path, opS.Payload)
 
 		return newOpC, newOpS
 	}
 
 	return opC, opS
+}
+
+// works on paths, ex.:
+//       replacePrefix("/foo/bar", "/foo", "/baz")
+//       returns: "/baz/bar"
+func replacePrefix(orig, prefix, newPrefix string) string {
+	if orig == prefix {
+		return newPrefix
+	}
+	if strings.HasPrefix(orig, prefix+"/") {
+		return newPrefix + orig[len(prefix):]
+	}
+	return orig
 }
