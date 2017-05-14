@@ -67,6 +67,7 @@ func getLine(g *gocui.Gui, v *gocui.View, key interface{}) error {
 			return err
 		}
 		fmt.Fprintln(v, l)
+		v.Editable = true
 		if _, err := g.SetCurrentView("msg"); err != nil {
 			return err
 		}
