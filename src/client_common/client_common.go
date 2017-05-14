@@ -78,8 +78,8 @@ func NewOTClient() *OTClient {
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
-	go cl.Pull()     // receiving operations
-	go cl.SendShit() // sending operations
+	go cl.Pull()        // receiving operations
+	go cl.SendRecords() // sending operations
 
 	return cl
 }
@@ -253,10 +253,10 @@ func (cl *OTClient) RandOp() {
 	val := strconv.Itoa(r.Intn(9))
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, Uid: cl.uid, Payload: val}
 	cl.Println("calling", args)
-	// cl.SendShit(&args)
+	// cl.SendRecords(&args)
 }
 
-func (cl *OTClient) SendShit() {
+func (cl *OTClient) SendRecords() {
 	// infinite loop to send stuff
 	for {
 		select {
