@@ -440,6 +440,10 @@ func (v *View) ViewBuffer() string {
 	return strings.Replace(str, "\x00", " ", -1)
 }
 
+func (v *View) RawBuffer() string {
+	return v.buffer
+}
+
 // Line returns a string with the line of the view's internal buffer
 // at the position corresponding to the point (x, y).
 func (v *View) Line(y int) (string, error) {

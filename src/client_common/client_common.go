@@ -25,6 +25,7 @@ type OTClient struct {
 	logs       []op.Op // logs of all operations
 	currState  string  // current state of text
 	version    int     // version=x means that the client has processed all of the
+	tempLine   string
 	// server's messages up to x. If a message is send, it will be with
 	// version x+1.
 
@@ -34,7 +35,7 @@ type OTClient struct {
 
 	outgoingQueue []op.Op // A queue of operations that have been locally
 	// applied but messages have not been sent
-	waitingForPop bool // Used to wait for messages in the buffer to pop
+	waitingForPop    bool // Used to wait for messages in the buffer to pop
 	startBufferIndex int
 
 	insertCb func(int, rune)
@@ -42,7 +43,7 @@ type OTClient struct {
 
 	chanPull chan bool
 	chanSend chan bool
-	chanPop chan bool
+	chanPop  chan bool
 }
 
 func NewOTClient() *OTClient {
@@ -75,15 +76,15 @@ func NewOTClient() *OTClient {
 	cl.insertCb = func(x int, ch rune) { /* noop */ }
 	cl.deleteCb = func(x int) { /* noop */ }
 
-	cl.chanPull = make(chan bool, 3)   // not sure how wide
+	cl.chanPull = make(chan bool, 3)  // not sure how wide
 	cl.chanSend = make(chan bool, 10) // not sure how wide
 	cl.chanPop = make(chan bool, 1)
 
 	var ack bool
 	cl.rpc_client.Call("OTServer.Init", cl.uid, &ack)
 
-	go cl.Pull()     // receiving operations
-	go cl.SendShit() // sending operations
+	go cl.Pull()        // receiving operations
+	go cl.SendRecords() // sending operations
 
 	return cl
 }
@@ -103,10 +104,10 @@ func (cl *OTClient) QueueFirstItem() op.Op {
 }
 
 func (cl *OTClient) getNextLogVer() int {
-	if len(cl.logs) == 0{
-		return cl.version 
+	if len(cl.logs) == 0 {
+		return cl.version
 	} else {
-		return cl.logs[len(cl.logs)-1].Version+1
+		return cl.logs[len(cl.logs)-1].Version + 1
 	}
 }
 
@@ -117,8 +118,8 @@ func (cl *OTClient) Pull() {
 	empty.OpType = "empty"
 	for {
 		select { // choose how long to wait
-			case <-cl.chanPull:
-			case <-time.After(SLEEP * time.Millisecond):
+		case <-cl.chanPull:
+		case <-time.After(SLEEP * time.Millisecond):
 		}
 
 		empty.Version = cl.version // update version
@@ -130,17 +131,21 @@ func (cl *OTClient) Pull() {
 			log.Fatal(err)
 		}
 		if reply.Logs[0].OpType != "empty" {
-			if cl.Debug { cl.Println("client behind; received", reply) }
+			if cl.Debug {
+				cl.Println("client behind; received", reply)
+			}
 			//respond to all of the logs
 			cl.startBufferIndex = 0 // reset startBufferIndex
 			for i := 0; i < len(reply.Logs); i++ {
 				cl.receiveSingleLog(reply.Logs[i])
 			}
 			cl.startBufferIndex = 0
-			if cl.waitingForPop{
+			if cl.waitingForPop {
 				cl.chanPop <- true // request to pop buffer if there isn't anything in buffer
 			}
-			if cl.Debug { cl.Println("done receive, ver now", cl.version) }
+			if cl.Debug {
+				cl.Println("done receive, ver now", cl.version)
+			}
 		}
 	}
 }
@@ -195,7 +200,7 @@ func (cl *OTClient) addCurrState(args op.Op) {
 		} else {
 			cl.currState = cl.currState[:args.Position] + args.Payload + cl.currState[args.Position:]
 		}
-	} else if args.OpType == "del" { 
+	} else if args.OpType == "del" {
 		if args.Position == len(cl.currState) && len(cl.currState) != 0 {
 			cl.currState = cl.currState[:args.Position-1]
 		} else if args.Position == 0 {
@@ -260,14 +265,14 @@ func (cl *OTClient) RandOp() {
 	val := strconv.Itoa(r.Intn(9))
 	args := op.Op{OpType: "ins", Position: pos, Version: cl.version, Uid: cl.uid, Payload: val}
 	cl.Println("calling", args)
-	// cl.SendShit(&args)
+	// cl.SendRecords(&args)
 }
 
-func (cl *OTClient) SendShit() {
+func (cl *OTClient) SendRecords() {
 	// infinite loop to send stuff
 	for {
-		select{
-			case <-cl.chanSend: // receive operation to send
+		select {
+		case <-cl.chanSend: // receive operation to send
 		}
 		args := cl.QueueFirstItem()
 		args.Version = cl.version // update version number before we send
@@ -276,13 +281,13 @@ func (cl *OTClient) SendShit() {
 			cl.Println("beginning send", args)
 		}
 		/*
-		if args != cl.logs[len(cl.logs)-1] {
-			// do pre-RPC call OT
-			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
-				args, _ = op.Xform(args, cl.getLogVersion(i))
+			if args != cl.logs[len(cl.logs)-1] {
+				// do pre-RPC call OT
+				for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
+					args, _ = op.Xform(args, cl.getLogVersion(i))
+				}
+				args.Version = cl.version // update version
 			}
-			args.Version = cl.version // update version
-		}
 		*/
 
 		var upToDate bool
@@ -297,12 +302,12 @@ func (cl *OTClient) SendShit() {
 			cl.chanPull <- true // send pull request
 			cl.waitingForPop = true
 			select {
-				case <- cl.chanPop:
-					cl.QueuePop()
-					cl.waitingForPop = false
+			case <-cl.chanPop:
+				cl.QueuePop()
+				cl.waitingForPop = false
 			}
 		} else {
-			cl.version++ // increment version since we are up to date with the server
+			cl.version++  // increment version since we are up to date with the server
 			cl.QueuePop() // pop the queue
 		}
 
@@ -324,28 +329,28 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 		// don't do anything
 	} else if args.OpType == "ins" || args.OpType == "del" || args.OpType == "noOp" {
 		/*
-		if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version+1 {
-			cl.addCurrState(args) // no need to do OT, simply update and add logs
-			cl.version++
-			if args.OpType == "ins" {
-				r := []rune(args.Payload) // convert string to rune
-				cl.Println("Simply insert ", args.Payload, " at position ", args.Position)
-				cl.insertCb(args.Position, r[0]) // when this works
-			} else {
-				cl.Println("Simply delete at position ", args.Position)
-				cl.deleteCb(args.Position)
-			}
-		} else { */
+			if args.VersionS == cl.version && len(cl.outgoingQueue) == 0 && args.VersionS == cl.logs[len(cl.logs)-1].Version+1 {
+				cl.addCurrState(args) // no need to do OT, simply update and add logs
+				cl.version++
+				if args.OpType == "ins" {
+					r := []rune(args.Payload) // convert string to rune
+					cl.Println("Simply insert ", args.Payload, " at position ", args.Position)
+					cl.insertCb(args.Position, r[0]) // when this works
+				} else {
+					cl.Println("Simply delete at position ", args.Position)
+					cl.deleteCb(args.Position)
+				}
+			} else { */
 		temp := args
 		// t1 := args // temporary setting
 		/*
-		for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
-			// do operational transforms
-			t1 = cl.getLogVersion(i)
-			if temp.Uid != t1.Uid{ // only do OT if on a different version
-				temp, _ = op.Xform(temp, t1) // get log version could be optimized
+			for i := args.Version; i < cl.logs[len(cl.logs)-1].Version; i++ {
+				// do operational transforms
+				t1 = cl.getLogVersion(i)
+				if temp.Uid != t1.Uid{ // only do OT if on a different version
+					temp, _ = op.Xform(temp, t1) // get log version could be optimized
+				}
 			}
-		}
 		*/
 
 		// We need to xform everything in the buffer
@@ -361,7 +366,7 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			cl.Println("receive xform to add", temp, "cl ver", cl.version, "buffer", cl.outgoingQueue)
 		}
 		if len(cl.logs) > 0 {
-			temp.Version = cl.logs[len(cl.logs)-1].Version+1 // overwrite the version
+			temp.Version = cl.logs[len(cl.logs)-1].Version + 1 // overwrite the version
 		}
 		cl.addCurrState(temp)
 		cl.version++
@@ -391,6 +396,18 @@ func (cl *OTClient) receiveSingleLog(args op.Op) {
 			//cl.Println("receive xform: now", cl.currState, "ver", cl.version, "logs", cl.logs)
 		}
 	}
+}
+
+func (cl *OTClient) PrepareMove(s string) {
+	cl.tempLine = s
+}
+
+func (cl *OTClient) Move(s string) {
+	args := op.Op{OpType: "move", Position: 0, Version: cl.version, VersionS: 0,
+		Uid: cl.uid, Payload: s, Path: cl.tempLine}
+	cl.addCurrState(args)
+	cl.QueuePush(args)
+	cl.chanSend <- true
 }
 
 func nrand() int64 {

@@ -52,43 +52,11 @@ func cursorUp(g *gocui.Gui, v *gocui.View, key interface{}) error {
 	return nil
 }
 
-func getLine(g *gocui.Gui, v *gocui.View, key interface{}) error {
-	var l string
-	var err error
-
-	_, cy := v.Cursor()
-	if l, err = v.Line(cy); err != nil {
-		l = ""
-	}
-
-	maxX, maxY := g.Size()
-	if v, err := g.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		fmt.Fprintln(v, l)
-		if _, err := g.SetCurrentView("msg"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func delMsg(g *gocui.Gui, v *gocui.View, key interface{}) error {
-	if err := g.DeleteView("msg"); err != nil {
-		return err
-	}
-	if _, err := g.SetCurrentView("side"); err != nil {
-		return err
-	}
-	return nil
-}
-
 func quit(g *gocui.Gui, v *gocui.View, key interface{}) error {
 	return gocui.ErrQuit
 }
 
-func keybindings(g *gocui.Gui) error {
+func keybindings(g *gocui.Gui, cl *client_common.OTClient) error {
 	if err := g.SetKeybinding("side", gocui.KeyCtrlSpace, gocui.ModNone, nextView); err != nil {
 		return err
 	}
@@ -104,10 +72,43 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, getLine); err != nil {
+	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, func(g *gocui.Gui, v *gocui.View, key interface{}) error {
+		var l string
+		var err error
+
+		_, cy := v.Cursor()
+		if l, err = v.Line(cy); err != nil {
+			l = ""
+		}
+
+		cl.PrepareMove(l)
+
+		maxX, maxY := g.Size()
+		if v, err := g.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
+			if err != gocui.ErrUnknownView {
+				return err
+			}
+			fmt.Fprintln(v, l)
+			v.Editable = true
+			if _, err := g.SetCurrentView("msg"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, delMsg); err != nil {
+	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, func(g *gocui.Gui, v *gocui.View, key interface{}) error {
+		line := v.RawBuffer() // updated path
+		cl.Move(line)
+		if err := g.DeleteView("msg"); err != nil {
+			return err
+		}
+		if _, err := g.SetCurrentView("side"); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -203,7 +204,7 @@ func start_ui(cl *client_common.OTClient) {
 	g.Cursor = true
 	g.SetManagerFunc(layout)
 
-	if err := keybindings(g); err != nil {
+	if err := keybindings(g, cl); err != nil {
 		log.Panicln(err)
 	}
 
