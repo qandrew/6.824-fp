@@ -35,5 +35,5 @@ cd $GOPATH/src/github.com
 rm -rf *
 go get github.com/jroimartin/gocui
 go get github.com/mattn/go-runewidth
-go get github.com/nsf-termbox-go
+go get github.com/nsf/termbox-go
 ~~~~
